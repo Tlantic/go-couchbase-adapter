@@ -8,3 +8,5 @@ import:
   version: 1.1.1
 - package: github.com/twinj/uuid
   version: 0.10.0
+- package: github.com/Tlantic/go-couchbase-adapter
+  version: ^0.0.1

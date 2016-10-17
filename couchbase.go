@@ -4,6 +4,7 @@ import (
 	"github.com/couchbase/gocb"
 	"github.com/twinj/uuid"
 	domain "github.com/Tlantic/mrs-integration-domain/storage"
+	"reflect"
 )
 
 type CouchbaseStore struct {
@@ -72,8 +73,8 @@ func (c *CouchbaseStore) Create(obj domain.DbObject) error {
 }
 
 func (c *CouchbaseStore) ReadOneWithType(key string, data interface{}) (error, *domain.DbObject) {
-	//var data interface{}
-	_, err := c.bucket.Get(key, &data)
+	data =  reflect.New(reflect.TypeOf(data).Elem()).Interface()
+	_, err := c.bucket.Get(key, data)
 	if err != nil {
 		return err, nil
 	}

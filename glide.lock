@@ -1,5 +1,5 @@
 hash: 24d0a2e4daa8ec9a41ec8787b0eb90b90f0930c242c6a32cead0445491560e55
-updated: 2016-10-17T12:38:42.2268418+01:00
+updated: 2016-10-17T12:46:40.7026899+01:00
 imports:
 - name: github.com/couchbase/gocb
   version: 0294694881f66dbb89df5932384b941df282e3db
