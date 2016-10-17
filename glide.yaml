@@ -1,0 +1,10 @@
+package: github.com/Tlantic/go-couchbase-adapter
+import:
+- package: github.com/Tlantic/mrs-integration-domain
+  version: 1.0.3
+  subpackages:
+  - storage
+- package: github.com/couchbase/gocb
+  version: 1.1.1
+- package: github.com/twinj/uuid
+  version: 0.10.0
