@@ -1,10 +1,11 @@
 package couchbase
 
 import (
+	"reflect"
+
+	domain "github.com/Tlantic/mrs-integration-domain/storage"
 	"github.com/couchbase/gocb"
 	"github.com/twinj/uuid"
-	domain "github.com/Tlantic/mrs-integration-domain/storage"
-	"reflect"
 )
 
 type CouchbaseStore struct {
@@ -33,7 +34,6 @@ func (c *CouchbaseStore) ConnectBucket() error {
 		return err
 	}
 
-
 	b, err := cluster.OpenBucket(c.bucketName, c.bucketPassword)
 	if err != nil {
 		return err
@@ -57,8 +57,6 @@ func (c *CouchbaseStore) SetName(name string) error {
 	return nil
 }
 
-
-
 func (c *CouchbaseStore) Create(obj domain.DbObject) error {
 
 	if obj.Key == "" {
@@ -73,15 +71,15 @@ func (c *CouchbaseStore) Create(obj domain.DbObject) error {
 }
 
 func (c *CouchbaseStore) ReadOneWithType(key string, data interface{}) (error, *domain.DbObject) {
-	data =  reflect.New(reflect.TypeOf(data).Elem()).Interface()
+	data = reflect.New(reflect.TypeOf(data).Elem()).Interface()
 	_, err := c.bucket.Get(key, data)
 	if err != nil {
 		return err, nil
 	}
 
 	obj := &domain.DbObject{
-		Key:      key,
-		Data:     data,
+		Key:  key,
+		Data: data,
 	}
 
 	return nil, obj
@@ -94,10 +92,9 @@ func (c *CouchbaseStore) ReadOne(key string) (error, *domain.DbObject) {
 		return err, nil
 	}
 
-
 	obj := &domain.DbObject{
-		Key:      key,
-		Data:     data,
+		Key:  key,
+		Data: data,
 	}
 
 	return nil, obj
@@ -111,7 +108,6 @@ func (c *CouchbaseStore) UpdateOne(obj *domain.DbObject) error {
 
 	return nil
 }
-
 
 func (c *CouchbaseStore) Update(obj *domain.DbObject) error {
 	_, err := c.bucket.Replace(obj.Key, obj.Data, 0, obj.Expiry)
@@ -139,4 +135,9 @@ func (c *CouchbaseStore) Destroy(data *domain.DbObject) error {
 func (c *CouchbaseStore) Read(query string) (error, []*domain.DbObject) {
 	qyr := NewNickelQuery(query, c.bucket)
 	return qyr.Execute()
+}
+
+func (c *CouchbaseStore) Exec(query string, params []interface{}) ([]*domain.DbObject, error) {
+	qyr := NewNickelQueryWithParams(query, c.bucket, params)
+	return qyr.ExecuteWithParams()
 }
