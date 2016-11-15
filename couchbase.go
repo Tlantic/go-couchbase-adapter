@@ -18,6 +18,7 @@ type CouchbaseStore struct {
 	cluster        *gocb.Cluster
 }
 
+//noinspection GoUnusedExportedFunction
 func NewCouchbaseStore(host, bucketName, bucketUser, bucketPassword string) *CouchbaseStore {
 	return &CouchbaseStore{
 		name:           "couchbase",
@@ -137,7 +138,7 @@ func (c *CouchbaseStore) Read(query string) (error, []*domain.DbObject) {
 	return qyr.Execute()
 }
 
-func (c *CouchbaseStore) Exec(query string, params []interface{}) ([]*domain.DbObject, error) {
+func (c *CouchbaseStore) Exec(query string, params interface{}) ([]*domain.DbObject, error) {
 	qyr := NewNickelQueryWithParams(query, c.bucket, params)
 	return qyr.ExecuteWithParams()
 }

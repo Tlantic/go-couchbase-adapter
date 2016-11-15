@@ -7,7 +7,7 @@ import (
 
 type NickelQuery struct {
 	query  string
-	params []interface{}
+	params interface{}
 	bucket *gocb.Bucket
 }
 
@@ -19,7 +19,7 @@ func NewNickelQuery(query string, bucket *gocb.Bucket) *NickelQuery {
 }
 
 // NewNickelQueryWithParams ...
-func NewNickelQueryWithParams(query string, bucket *gocb.Bucket, params []interface{}) *NickelQuery {
+func NewNickelQueryWithParams(query string, bucket *gocb.Bucket, params interface{}) *NickelQuery {
 	return &NickelQuery{
 		query:  query,
 		bucket: bucket,
