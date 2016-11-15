@@ -17,14 +17,21 @@ type CouchbaseStore struct {
 	cluster        *gocb.Cluster
 }
 
+//noinspection GoUnusedExportedFunction
 func NewCouchbaseStore(host, bucketName, bucketUser, bucketPassword string) *CouchbaseStore {
-	return &CouchbaseStore{
+	s := &CouchbaseStore{
 		name:           "couchbase",
 		host:           host,
 		bucketName:     bucketName,
 		bucketUser:     bucketUser,
 		bucketPassword: bucketPassword,
 	}
+
+	if err := s.ConnectBucket(); err != nil {
+		panic(err)
+	}
+
+	return s
 }
 
 func (c *CouchbaseStore) ConnectBucket() error {
