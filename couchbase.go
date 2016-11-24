@@ -6,42 +6,42 @@ import (
 	domain "github.com/Tlantic/mrs-integration-domain/storage"
 	"github.com/couchbase/gocb"
 	"github.com/twinj/uuid"
+	"sync"
 )
 
+var mu = sync.Mutex{}
+var clusters = map[string]*gocb.Cluster{}
+
 type CouchbaseStore struct {
-	name           string
-	host           string
-	bucketName     string
-	bucketUser     string
-	bucketPassword string
-	bucket         *gocb.Bucket
-	cluster        *gocb.Cluster
+	name     string
+	bucket   *gocb.Bucket
 }
 
-//noinspection GoUnusedExportedFunction
-func NewCouchbaseStore(host, bucketName, bucketUser, bucketPassword string) *CouchbaseStore {
-	return &CouchbaseStore{
-		name:           "couchbase",
-		host:           host,
-		bucketName:     bucketName,
-		bucketUser:     bucketUser,
-		bucketPassword: bucketPassword,
+//noinspection GoUnusedExportedFunction,GoUnusedParameter
+func NewCouchbaseStore(host, bucketName, bucketUser, bucketPassword string) (*CouchbaseStore, error) {
+	defer mu.Unlock()
+	mu.Lock()
+
+	var err error
+	var clust *gocb.Cluster
+
+	if clust = clusters[host]; clust == nil {
+		if clust, err = gocb.Connect(host); err != nil {
+			return nil, err
+		}
+		clusters[host] = clust
 	}
+
+	if b, err := clust.OpenBucket(bucketName, bucketPassword); err == nil {
+		return &CouchbaseStore{
+			name:   "couchbase",
+			bucket: b,
+		}, nil
+	}
+	return nil, err
 }
 
 func (c *CouchbaseStore) ConnectBucket() error {
-	cluster, err := gocb.Connect(c.host)
-	if err != nil {
-		return err
-	}
-
-	b, err := cluster.OpenBucket(c.bucketName, c.bucketPassword)
-	if err != nil {
-		return err
-	}
-
-	c.bucket = b
-	c.cluster = cluster
 	return nil
 }
 

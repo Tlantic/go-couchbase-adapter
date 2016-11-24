@@ -1,6 +1,7 @@
 package couchbase
 
 import (
+	"encoding/json"
 	domain "github.com/Tlantic/mrs-integration-domain/storage"
 	"github.com/couchbase/gocb"
 )
@@ -59,7 +60,7 @@ func (n *NickelQuery) ExecuteWithParams() ([]*domain.DbObject, error) {
 		return nil, err
 	}
 
-	var document interface{}
+	var document json.RawMessage
 	var documents []*domain.DbObject
 	for rows.Next(&document) {
 		doc := &domain.DbObject{
