@@ -32,11 +32,9 @@ var clusters = map[string]*gocb.Cluster{}
 // Assert interface implementation
 var _ Database = (*CouchbaseStore)(nil)
 
-
-
 type CouchbaseStore struct {
-	name     string
-	bucket   *gocb.Bucket
+	name   string
+	bucket *gocb.Bucket
 }
 
 //noinspection GoUnusedExportedFunction
@@ -55,13 +53,15 @@ func NewCouchbaseStore(host, bucketName, bucketPassword string) (*CouchbaseStore
 	}
 
 	if b, err := clust.OpenBucket(bucketName, bucketPassword); err == nil {
-			return &CouchbaseStore{name: "couchbase", bucket: b }, nil
+		return &CouchbaseStore{name: "couchbase", bucket: b }, nil
 	}
 	return nil, err
 }
 
 func ( c *CouchbaseStore ) Close() {
-	c.bucket.Close()
+	if c.bucket != nil {
+		c.bucket.Close()
+	}
 }
 
 func (c *CouchbaseStore) GetName() string {
@@ -72,7 +72,6 @@ func (c *CouchbaseStore) SetName(name string) error {
 	return nil
 }
 
-
 func (c *CouchbaseStore) Create(xs ... interface{}) ([]Row, bool) {
 
 	isOk := true
@@ -81,7 +80,7 @@ func (c *CouchbaseStore) Create(xs ... interface{}) ([]Row, bool) {
 	bulkOps := make([]gocb.BulkOp, length, length)
 	now := time.Now().UTC()
 
-	for i:=0;i<length;i++ {
+	for i := 0; i < length; i++ {
 		doc := newDoc()
 		rows[i] = doc
 		doc.Meta[CREATEDON] = now
@@ -127,11 +126,10 @@ func (c *CouchbaseStore) Create(xs ... interface{}) ([]Row, bool) {
 		}
 	}
 
-
 	if c.bucket.Do(bulkOps) != nil {
 		isOk = false
 	}
-	for i:=0;i<length;i++{
+	for i := 0; i < length; i++ {
 		op := bulkOps[i].(*gocb.InsertOp)
 		doc := rows[i].(*doc)
 		doc.Meta[CAS] = op.Cas
@@ -178,7 +176,6 @@ func (c *CouchbaseStore) CreateOne(x interface{}) Row {
 	return doc
 }
 
-
 func (c *CouchbaseStore) Read(xs ...interface{}) ([]Row, bool) {
 
 	isOk := true
@@ -186,7 +183,7 @@ func (c *CouchbaseStore) Read(xs ...interface{}) ([]Row, bool) {
 	rows := make([]Row, length, length)
 	bulkOps := make([]gocb.BulkOp, length, length)
 
-	for i:=0;i<length;i++ {
+	for i := 0; i < length; i++ {
 
 		doc := newDoc()
 		rows[i] = doc
@@ -201,7 +198,6 @@ func (c *CouchbaseStore) Read(xs ...interface{}) ([]Row, bool) {
 			doc.key = value.GetKey()
 			doc.Type = value.GetType()
 			doc.Data = value.GetData()
-
 
 			cas, _ := value.GetMeta(CAS).(gocb.Cas)
 
@@ -221,11 +217,10 @@ func (c *CouchbaseStore) Read(xs ...interface{}) ([]Row, bool) {
 		}
 	}
 
-
 	if c.bucket.Do(bulkOps) != nil {
 		isOk = false
 	}
-	for i:=0;i<length;i++{
+	for i := 0; i < length; i++ {
 		op := bulkOps[i].(*gocb.GetOp)
 		doc := rows[i].(*doc)
 		doc.Meta[CAS] = op.Cas
@@ -264,9 +259,7 @@ func (c *CouchbaseStore) ReadOneWithType(x interface{}, out interface{}) Row {
 	return row
 }
 
-
 func (c *CouchbaseStore) Replace(xs ... interface{}) ([]Row, bool) {
-
 
 	isOk := true
 	length := len(xs)
@@ -274,8 +267,7 @@ func (c *CouchbaseStore) Replace(xs ... interface{}) ([]Row, bool) {
 	bulkOps := make([]gocb.BulkOp, length, length)
 	now := time.Now().UTC()
 
-
-	for i:=0;i<length;i++ {
+	for i := 0; i < length; i++ {
 		doc := newDoc()
 		rows[i] = doc
 
@@ -298,7 +290,7 @@ func (c *CouchbaseStore) Replace(xs ... interface{}) ([]Row, bool) {
 				Expiry: expiry,
 			}
 
-		}else  {
+		} else {
 			doc.fault = errors.New("Unsupported type, expecting Row.")
 			isOk = false
 		}
@@ -307,7 +299,7 @@ func (c *CouchbaseStore) Replace(xs ... interface{}) ([]Row, bool) {
 	if c.bucket.Do(bulkOps) != nil {
 		isOk = false
 	}
-	for i:=0;i<length;i++{
+	for i := 0; i < length; i++ {
 
 		op := bulkOps[i].(*gocb.ReplaceOp)
 		doc := rows[i].(*doc)
@@ -335,7 +327,7 @@ func (c *CouchbaseStore) ReplaceOne(x interface{}) Row {
 	if value, ok := x.(Row); ok {
 		if ( value.GetKey() == "" ) {
 			row.Data = value.GetData()
-			row.Id =  value.GetId()
+			row.Id = value.GetId()
 		}
 		if value, ok := value.GetMeta(TTL).(uint32); ok {
 			expiry = value
@@ -349,7 +341,6 @@ func (c *CouchbaseStore) ReplaceOne(x interface{}) Row {
 		row.Data = x
 	}
 
-
 	if cas, err := c.bucket.Replace(row.GetKey(), row, cas, expiry); err != nil {
 		row.fault = err
 	} else {
@@ -359,14 +350,13 @@ func (c *CouchbaseStore) ReplaceOne(x interface{}) Row {
 	return row
 }
 
-
 func (c *CouchbaseStore) Update(xs ... interface{}) ([]Row, bool) {
 	var faulted bool
 
 	var length int = len(xs)
 	var rows = make([]Row, length, length)
 
-	for i:=0;i<length;i++ {
+	for i := 0; i < length; i++ {
 		rows[i] = c.UpdateOne(xs[i])
 		faulted = rows[i].IsFaulted()
 	}
@@ -379,14 +369,13 @@ func (c *CouchbaseStore) UpdateOne(x interface{}) Row {
 	}
 }
 
-
 func (c *CouchbaseStore) Destroy(xs...interface{}) ([]Row, bool) {
 	var faulted bool
 
 	var length int = len(xs)
 	var rows = make([]Row, length, length)
 
-	for i:=0;i<length;i++ {
+	for i := 0; i < length; i++ {
 		rows[i] = c.DestroyOne(xs[i])
 		faulted = rows[i].IsFaulted()
 	}
@@ -406,7 +395,6 @@ func (c *CouchbaseStore) DestroyOne(x interface{}) Row {
 	case fmt.Stringer:
 		row.Id = value.String()
 	}
-
 
 	if cas, err := c.bucket.Remove(row.Id, cas); err != nil {
 		row.fault = err
