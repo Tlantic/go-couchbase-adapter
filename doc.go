@@ -29,8 +29,9 @@ type doc struct {
 	Meta  map[string]interface{}      `json:"meta"`
 }
 
-func newDoc() *doc {
+func newDoc(id string) *doc {
 	return &doc{
+		Id: id,
 		Meta: map[string]interface{}{
 			storage.TTL: new(uint32),
 		},

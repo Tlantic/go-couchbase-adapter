@@ -10,20 +10,20 @@ import (
 
 func TestDoc_SetKey(t *testing.T) {
 	key := "1337"
-	doc := newDoc()
+	doc := newDoc(key)
 
-	doc.SetId(key)
-	if doc.Id != key {
+	doc.SetKey(key)
+	if doc.key != key {
 		t.Fail()
 	}
 }
 
 func TestDoc_GetKey(t *testing.T) {
 	key := "1337"
-	doc := newDoc()
+	doc := newDoc(key)
 
-	doc.SetId(key)
-	if doc.GetId() != key {
+	doc.SetKey(key)
+	if doc.GetKey() != key {
 		t.Fail()
 	}
 }
@@ -32,7 +32,7 @@ func TestDoc_SetData(t *testing.T) {
 	data := &map[string]string{
 		"propName": "propValue",
 	}
-	doc := newDoc()
+	doc := newDoc("")
 
 	doc.SetData(data)
 	if doc.Data != data {
@@ -44,7 +44,7 @@ func TestDoc_GetData(t *testing.T) {
 	data := &map[string]string{
 		"propName": "propValue",
 	}
-	doc := newDoc()
+	doc := newDoc("")
 
 	doc.SetData(data)
 	if doc.GetData() != data {
@@ -53,7 +53,7 @@ func TestDoc_GetData(t *testing.T) {
 }
 
 func TestDoc_SetMeta(t *testing.T) {
-	doc := newDoc()
+	doc := newDoc("")
 	doc.SetMeta("propName", "propValue")
 	if doc.Meta["propName"].(string) != "propValue" {
 		t.Fail()
@@ -61,7 +61,7 @@ func TestDoc_SetMeta(t *testing.T) {
 }
 
 func TestDoc_GetMeta(t *testing.T) {
-	doc := newDoc()
+	doc := newDoc("")
 	doc.SetMeta("propName", "propValue")
 	if doc.GetMeta("propName").(string) != "propValue" {
 		t.Fail()
@@ -72,7 +72,7 @@ func TestDoc_CreatedOn(t *testing.T) {
 	var ts *time.Time
 
 	now := time.Now()
-	doc := newDoc()
+	doc := newDoc("")
 
 	ts = doc.CreatedOn()
 	if (ts != nil) {
@@ -100,7 +100,7 @@ func TestDoc_CreatedOn(t *testing.T) {
 }
 
 func TestDoc_IsFaulted(t *testing.T) {
-	doc := newDoc()
+	doc := newDoc("")
 
 	if doc.IsFaulted() == true {
 		t.FailNow()
@@ -114,7 +114,7 @@ func TestDoc_IsFaulted(t *testing.T) {
 }
 
 func TestDoc_Fault(t *testing.T) {
-	doc := newDoc()
+	doc := newDoc("")
 	fault := errors.New("errMessage")
 	doc.fault = fault
 
@@ -125,7 +125,7 @@ func TestDoc_Fault(t *testing.T) {
 }
 
 func TestDoc_SetExpiry(t *testing.T) {
-	doc := newDoc()
+	doc := newDoc("")
 
 	doc.SetExpiry(1)
 	if doc.GetMeta(storage.TTL).(uint32) != 1 {
