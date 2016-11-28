@@ -4,14 +4,15 @@ import (
 	"os"
 	"time"
 	"testing"
+	"encoding/json"
 
 	"github.com/twinj/uuid"
 	"fmt"
 )
 
 type User struct {
-	Username 	string		`json:"username"`
-	Password 	string		`json:"password"`
+	Username string        `json:"username"`
+	Password string        `json:"password"`
 }
 
 func TestNewCouchbaseStore(t *testing.T) {
@@ -39,41 +40,23 @@ func TestCouchbaseStore_Create(t *testing.T) {
 			Password: "2",
 		}
 
-		d1 := newDoc()
-		d1.SetId(uuid.NewV4().String())
+		d1 := newDoc(uuid.NewV4().String())
 		d1.SetType("test")
 		d1.SetExpiry(5)
 		d1.SetData(record1)
 
-
-		d2 := newDoc()
-		d2.SetId(uuid.NewV4().String())
+		d2 := newDoc(uuid.NewV4().String())
 		d2.SetType("test")
 		d2.SetExpiry(5)
 		d2.SetData(record2)
 
-		if res, ok := store.Create(d1,d2); !ok {
+		if res, ok := store.Create(d1, d2); !ok {
 			for _, v := range res {
 				if v.IsFaulted() {
 					t.Error(v.Fault())
 				}
 			}
 		}
-
-		if res, err := store.Exec(newQuery( "SELECT * FROM `m`", nil )); err != nil {
-			t.Error(err)
-		} else {
-			usr := User{}
-			if err := res.One(&struct {
-				M	User
-			}{
-				M: usr,
-			}); err != nil {
-				t.Error(err)
-			}
-			fmt.Println(usr)
-		}
-
 	}
 
 }
@@ -85,15 +68,13 @@ func TestCouchbaseStore_CreateOne(t *testing.T) {
 	} else {
 		defer store.Close()
 
-		d := newDoc()
-		d.SetId(uuid.NewV4().String())
+		d := newDoc(uuid.NewV4().String())
 		d.SetType("test")
 		d.SetExpiry(5)
 		d.SetData(User{
 			Username:"username",
 			Password: "password",
 		})
-
 
 		if res := store.CreateOne(d); res.IsFaulted() {
 			t.Error(res.Fault())
@@ -107,7 +88,6 @@ func TestCouchbaseStore_CreateOne(t *testing.T) {
 		if res := store.CreateOne(d); res.IsFaulted() {
 			t.Error(res.Fault())
 		}
-
 
 		if res := store.CreateOne(d.GetData()); res.IsFaulted() {
 			t.Error(res.Fault())
@@ -127,12 +107,10 @@ func TestCouchbaseStore_ReadOneWithType(t *testing.T) {
 			Username:"username",
 			Password: "password",
 		}
-		d := newDoc()
-		d.SetId(uuid.NewV4().String())
+		d := newDoc(uuid.NewV4().String())
 		d.SetType("test")
 		d.SetExpiry(5)
 		d.SetData(record)
-
 
 		if res := store.CreateOne(d); res.IsFaulted() {
 			t.Error(res.Fault())
@@ -163,12 +141,10 @@ func TestCouchbaseStore_ReadOne(t *testing.T) {
 			Username:"username",
 			Password: "password",
 		}
-		d := newDoc()
-		d.SetId(uuid.NewV4().String())
+		d := newDoc(uuid.NewV4().String())
 		d.SetType("test")
 		d.SetExpiry(5)
 		d.SetData(record)
-
 
 		if res := store.CreateOne(d); res.IsFaulted() {
 			t.Error(res.Fault())
@@ -204,15 +180,12 @@ func TestCouchbaseStore_Read(t *testing.T) {
 			Password: "2",
 		}
 
-		d1 := newDoc()
-		d1.SetId(uuid.NewV4().String())
+		d1 := newDoc(uuid.NewV4().String())
 		d1.SetType("test")
 		d1.SetExpiry(5)
 		d1.SetData(record1)
 
-
-		d2 := newDoc()
-		d2.SetId(uuid.NewV4().String())
+		d2 := newDoc(uuid.NewV4().String())
 		d2.SetType("test")
 		d2.SetExpiry(5)
 		d2.SetData(record2)
@@ -225,8 +198,8 @@ func TestCouchbaseStore_Read(t *testing.T) {
 		}
 
 		if res, ok := store.Read(d1, d2); !ok {
-			for _,v := range res {
-				if ( v.IsFaulted() )  {
+			for _, v := range res {
+				if ( v.IsFaulted() ) {
 					t.Error(v.Fault())
 				}
 			}
@@ -235,5 +208,60 @@ func TestCouchbaseStore_Read(t *testing.T) {
 }
 
 func TestCouchbaseStore_Exec(t *testing.T) {
+	store, err := NewCouchbaseStore(os.Getenv("COUCHBASE_HOST"), os.Getenv("COUCHBASE_BUCKET"), os.Getenv("COUCHBASE_PASSWORD"))
+	if ( err != nil ) {
+		t.Error(err)
+	} else {
 
+		defer store.Close()
+
+		record1 := &User{
+			Username:"1",
+			Password: "1",
+		}
+
+		record2 := &User{
+			Username:"2",
+			Password: "2",
+		}
+
+		d1 := newDoc(uuid.NewV4().String())
+		d1.SetType("test")
+		d1.SetExpiry(5)
+		d1.SetData(record1)
+
+		d2 := newDoc(uuid.NewV4().String())
+		d2.SetType("test")
+		d2.SetExpiry(5)
+		d2.SetData(record2)
+
+		if res, ok := store.Create(d1, d2); !ok {
+			for _, v := range res {
+				if v.IsFaulted() {
+					t.Error(v.Fault())
+				}
+			}
+		}
+		time.Sleep(1000 * time.Millisecond)
+		q := store.NewQuery("SELECT * FROM `m` WHERE _type=\"test\"")
+		if res, err := store.Exec(q); err != nil {
+			t.Error(err)
+		} else {
+
+			users := []User{}
+
+			res.ForEach(func(idx int, data []byte) {
+				var result struct {
+					Row struct {
+							Data User    `json:"data"`
+						}            `json:"m"`
+				}
+				json.Unmarshal(data, &result)
+				users = append(users, result.Row.Data)
+			})
+			fmt.Println(users)
+
+		}
+
+	}
 }

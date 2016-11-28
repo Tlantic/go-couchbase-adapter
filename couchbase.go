@@ -21,6 +21,7 @@ const (
 	TIMEOUT = "timeout"
 )
 
+//noinspection GoUnusedGlobalVariable
 var (
 	errInvalidQueryType = errors.New("Unsupported query type")
 )
@@ -64,6 +65,13 @@ func ( c *CouchbaseStore ) Close() {
 	}
 }
 
+func ( c *CouchbaseStore ) NewRow(id string) Row {
+	return newDoc(id)
+}
+func ( c *CouchbaseStore ) NewQuery(statement string) Query {
+	return newQuery(statement)
+}
+
 func (c *CouchbaseStore) GetName() string {
 	return c.name
 }
@@ -81,7 +89,7 @@ func (c *CouchbaseStore) Create(xs ... interface{}) ([]Row, bool) {
 	now := time.Now().UTC()
 
 	for i := 0; i < length; i++ {
-		doc := newDoc()
+		doc := newDoc("")
 		rows[i] = doc
 		doc.Meta[CREATEDON] = now
 		doc.Meta[UPDATEDON] = now
@@ -98,6 +106,7 @@ func (c *CouchbaseStore) Create(xs ... interface{}) ([]Row, bool) {
 			var cas gocb.Cas
 
 			doc.key = value.GetKey()
+			doc.Id = value.GetId()
 			doc.Type = value.GetType()
 			doc.Data = value.GetData()
 
@@ -145,7 +154,7 @@ func (c *CouchbaseStore) Create(xs ... interface{}) ([]Row, bool) {
 func (c *CouchbaseStore) CreateOne(x interface{}) Row {
 
 	var expiry uint32
-	doc := newDoc()
+	doc := newDoc("")
 
 	now := time.Now().UTC()
 	doc.Meta[CREATEDON] = now
@@ -185,7 +194,7 @@ func (c *CouchbaseStore) Read(xs ...interface{}) ([]Row, bool) {
 
 	for i := 0; i < length; i++ {
 
-		doc := newDoc()
+		doc := newDoc("")
 		rows[i] = doc
 
 		switch value := xs[i].(type) {
@@ -196,6 +205,7 @@ func (c *CouchbaseStore) Read(xs ...interface{}) ([]Row, bool) {
 			}
 		case Row:
 			doc.key = value.GetKey()
+			doc.Id = value.GetId()
 			doc.Type = value.GetType()
 			doc.Data = value.GetData()
 
@@ -238,7 +248,7 @@ func (c *CouchbaseStore) ReadOne(x interface{}) Row {
 func (c *CouchbaseStore) ReadOneWithType(x interface{}, out interface{}) Row {
 
 	var key string
-	row := newDoc()
+	row := newDoc("")
 	row.Data = out
 
 	switch value := x.(type) {
@@ -246,6 +256,7 @@ func (c *CouchbaseStore) ReadOneWithType(x interface{}, out interface{}) Row {
 		key = value
 	case Row:
 		key = value.GetKey()
+		row.Id = value.GetId()
 	case fmt.Stringer:
 		key = value.String()
 	}
@@ -268,7 +279,7 @@ func (c *CouchbaseStore) Replace(xs ... interface{}) ([]Row, bool) {
 	now := time.Now().UTC()
 
 	for i := 0; i < length; i++ {
-		doc := newDoc()
+		doc := newDoc("")
 		rows[i] = doc
 
 		doc.Meta[UPDATEDON] = now
@@ -276,6 +287,7 @@ func (c *CouchbaseStore) Replace(xs ... interface{}) ([]Row, bool) {
 		if value, ok := xs[i].(Row); ok {
 
 			doc.key = value.GetKey()
+			doc.Id = value.GetId()
 			doc.Type = value.GetType()
 			doc.Data = value.GetData()
 
@@ -317,37 +329,39 @@ func (c *CouchbaseStore) Replace(xs ... interface{}) ([]Row, bool) {
 }
 func (c *CouchbaseStore) ReplaceOne(x interface{}) Row {
 
-	var row *doc = newDoc()
+	doc := newDoc("")
 	var expiry uint32
 	var cas gocb.Cas
 
 	now := time.Now().UTC()
-	row.Meta[UPDATEDON] = now
+	doc.Meta[UPDATEDON] = now
 
 	if value, ok := x.(Row); ok {
-		if ( value.GetKey() == "" ) {
-			row.Data = value.GetData()
-			row.Id = value.GetId()
-		}
+
+		doc.key = value.GetKey()
+		doc.Id = value.GetId()
+		doc.Type = value.GetType()
+		doc.Data = value.GetData()
+
 		if value, ok := value.GetMeta(TTL).(uint32); ok {
 			expiry = value
-			row.Meta[TTL] = value
+			doc.Meta[TTL] = value
 		}
 		if value, ok := value.GetMeta(CAS).(gocb.Cas); ok {
 			cas = value
 		}
 	} else {
-		row.Id = uuid.NewV4().String()
-		row.Data = x
+		doc.Id = uuid.NewV4().String()
+		doc.Data = x
 	}
 
-	if cas, err := c.bucket.Replace(row.GetKey(), row, cas, expiry); err != nil {
-		row.fault = err
+	if cas, err := c.bucket.Replace(doc.GetKey(), doc, cas, expiry); err != nil {
+		doc.fault = err
 	} else {
-		row.Meta[CAS] = cas
+		doc.Meta[CAS] = cas
 	}
 
-	return row
+	return doc
 }
 
 func (c *CouchbaseStore) Update(xs ... interface{}) ([]Row, bool) {
@@ -384,50 +398,51 @@ func (c *CouchbaseStore) Destroy(xs...interface{}) ([]Row, bool) {
 func (c *CouchbaseStore) DestroyOne(x interface{}) Row {
 
 	var cas gocb.Cas
-	row := &doc{}
+	doc := newDoc("")
 
 	switch value := x.(type) {
 	case string:
-		row.Id = value
+		doc.Id = value
 	case Row:
-		row.Id = value.GetKey()
+
+		doc.key = value.GetKey()
+		doc.Id = value.GetId()
+		doc.Type = value.GetType()
+
 		cas = value.GetMeta(CAS).(gocb.Cas)
 	case fmt.Stringer:
-		row.Id = value.String()
+		doc.key = value.String()
 	}
 
-	if cas, err := c.bucket.Remove(row.Id, cas); err != nil {
-		row.fault = err
+	if cas, err := c.bucket.Remove(doc.GetKey(), cas); err != nil {
+		doc.fault = err
 	} else {
-		row.Meta[CAS] = cas
+		doc.Meta[CAS] = cas
 	}
 
-	return row
+	return doc
 }
 
 func (c *CouchbaseStore) Exec(q Query) (QueryResult, error) {
-	params := q.Params()
-	if queryString, ok := q.Query().(string); !ok {
-		return nil, errInvalidQueryType
-	} else {
+	params := q.GetParams()
+	n1qlquery := gocb.NewN1qlQuery(q.GetStatement())
 
-		n1qlquery := gocb.NewN1qlQuery(queryString)
-		if value, ok := q.GetMeta(ADHOC).(bool); ok {
+	if value, ok := q.GetMeta(ADHOC).(bool); ok {
 			n1qlquery.AdHoc(value)
 		}
 
-		if value, ok := q.GetMeta(CONSISTENCY).(int); ok {
+	if value, ok := q.GetMeta(CONSISTENCY).(int); ok {
 			n1qlquery.Consistency(gocb.ConsistencyMode(value))
 		}
 
-		if value, ok := q.GetMeta(TIMEOUT).(time.Duration); ok {
+	if value, ok := q.GetMeta(TIMEOUT).(time.Duration); ok {
 			n1qlquery.Timeout(value)
 		}
 
-		if results, err := c.bucket.ExecuteN1qlQuery(n1qlquery, params); err != nil {
+	if results, err := c.bucket.ExecuteN1qlQuery(n1qlquery, params); err != nil {
 			return nil, err
 		} else {
-			return newQueryResult(n1qlquery, params, results), nil
+			return newQueryResult(q, results), nil
 		}
-	}
+
 }
