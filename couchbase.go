@@ -38,7 +38,7 @@ type CouchbaseStore struct {
 	bucket *gocb.Bucket
 }
 
-//noinspection GoUnusedExportedFunction
+//noinspection ALL
 func NewCouchbaseStore(host, bucketName, bucketPassword string) (*CouchbaseStore, error) {
 	defer mu.Unlock()
 	mu.Lock()
@@ -257,6 +257,9 @@ func (c *CouchbaseStore) ReadOneWithType(x interface{}, out interface{}) Row {
 	case Row:
 		key = value.GetKey()
 		row.Id = value.GetId()
+		if (row.Data == nil) {
+			row.Data = value.GetData()
+		}
 	case fmt.Stringer:
 		key = value.String()
 	}
