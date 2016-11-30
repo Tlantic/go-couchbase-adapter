@@ -29,6 +29,7 @@ type doc struct {
 	Meta  map[string]interface{}      `json:"meta"`
 }
 
+//noinspection ALL
 func newDoc(id string) *doc {
 	return &doc{
 		Id: id,
@@ -40,15 +41,19 @@ func newDoc(id string) *doc {
 
 func (row *doc) GetKey() string {
 	if row.key == "" {
-		buf := bytes.NewBufferString(row.GetType())
-		buf.WriteString("::")
-		buf.WriteString(row.Id)
-		return buf.String()
+		if row.Data != nil {
+			buf := bytes.NewBufferString(row.GetType())
+			buf.WriteString("::")
+			buf.WriteString(row.Id)
+			return buf.String()
+		} else {
+			return row.Id
+		}
 	}
 	return row.key
 }
 func (row *doc) SetKey(value string) {
-	row.Id = value
+	row.key = value
 }
 
 func (row *doc) GetId() string {
@@ -60,7 +65,7 @@ func (row *doc) SetId(value string) {
 
 func (row *doc) GetType() string {
 	if (row.Type == "" && row.Data != nil) {
-		return strings.ToLower(reflect.TypeOf(row.Data).Name())
+		return strings.ToLower(reflect.TypeOf(row.Data).Elem().Name())
 	}
 	return row.Type
 }
