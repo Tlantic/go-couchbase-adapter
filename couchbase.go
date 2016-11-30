@@ -109,6 +109,7 @@ func (c *CouchbaseStore) Create(xs ... interface{}) ([]Row, bool) {
 			doc.Id = value.GetId()
 			doc.Type = value.GetType()
 			doc.Data = value.GetData()
+			doc.mergeMetadata(value.Metadata())
 
 			if value, ok := value.GetMeta(TTL).(uint32); ok {
 				expiry = value
@@ -166,6 +167,7 @@ func (c *CouchbaseStore) CreateOne(x interface{}) Row {
 		doc.Id = row.GetId()
 		doc.Type = row.GetType()
 		doc.Data = row.GetData()
+		doc.mergeMetadata(row.Metadata())
 
 		if value, ok := row.GetMeta(TTL).(uint32); ok {
 			expiry = value
@@ -207,6 +209,7 @@ func (c *CouchbaseStore) Read(xs ...interface{}) ([]Row, bool) {
 			doc.Id = value.GetId()
 			doc.Type = value.GetType()
 			doc.Data = value.GetData()
+			doc.mergeMetadata(value.Metadata())
 
 			cas, _ := value.GetMeta(CAS).(gocb.Cas)
 
@@ -256,9 +259,11 @@ func (c *CouchbaseStore) ReadOneWithType(x interface{}, out interface{}) Row {
 	case Row:
 		key = value.GetKey()
 		row.Id = value.GetId()
+		row.mergeMetadata(value.Metadata())
 		if (row.Data == nil) {
 			row.Data = value.GetData()
 		}
+
 	case fmt.Stringer:
 		key = value.String()
 	}
@@ -344,6 +349,7 @@ func (c *CouchbaseStore) ReplaceOne(x interface{}) Row {
 		doc.Id = value.GetId()
 		doc.Type = value.GetType()
 		doc.Data = value.GetData()
+		doc.mergeMetadata(value.Metadata())
 
 		if value, ok := value.GetMeta(TTL).(uint32); ok {
 			expiry = value
@@ -411,7 +417,8 @@ func (c *CouchbaseStore) DestroyOne(x interface{}) Row {
 		doc.Id = value.GetId()
 		doc.Type = value.GetType()
 		doc.Data = value.GetData()
-		cas = value.GetMeta(CAS).(gocb.Cas)
+		doc.mergeMetadata(value.Metadata())
+		cas, _ = value.GetMeta(CAS).(gocb.Cas)
 	case fmt.Stringer:
 		doc.key = value.String()
 	}

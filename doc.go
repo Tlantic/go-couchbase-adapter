@@ -28,7 +28,13 @@ type doc struct {
 	Data  interface{}                 `json:"data"`
 	Meta  map[string]interface{}      `json:"meta"`
 }
-
+func (row *doc) mergeMetadata(src map[string]interface{})  {
+ for k, v := range src {
+	 if (row.Meta[k] == nil) {
+		 row.Meta[k] = v
+	 }
+ }
+}
 //noinspection ALL
 func newDoc(id string) *doc {
 	return &doc{
@@ -38,6 +44,7 @@ func newDoc(id string) *doc {
 		},
 	}
 }
+
 
 func (row *doc) GetKey() string {
 	if row.key == "" {
@@ -85,6 +92,13 @@ func (doc *doc) SetMeta(key string, value interface{}) {
 }
 func (doc *doc) GetMeta(key string) interface{} {
 	return doc.Meta[key]
+}
+func (doc *doc) Metadata() map[string]interface{} {
+	cpy := make(map[string]interface{})
+	for k,v := range doc.Meta {
+		cpy[k] = v
+	}
+	return cpy
 }
 
 func (doc *doc) CreatedOn() *time.Time {
