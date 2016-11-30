@@ -12,15 +12,6 @@ import (
 	. "github.com/Tlantic/mrs-integration-domain/storage"
 )
 
-//noinspection GoUnusedConst
-const (
-	CAS = "cas"
-	ADHOC = "adhoc"
-	CONSISTENCY = "consistency"
-	CONSISTENTWITH = "consistent_with"
-	TIMEOUT = "timeout"
-)
-
 //noinspection GoUnusedGlobalVariable
 var (
 	errInvalidQueryType = errors.New("Unsupported query type")
@@ -250,31 +241,38 @@ func (c *CouchbaseStore) ReadOne(x interface{}) Row {
 func (c *CouchbaseStore) ReadOneWithType(x interface{}, out interface{}) Row {
 
 	var key string
-	row := newDoc("")
-	row.Data = out
+	doc := newDoc("")
+	doc.Data = out
 
 	switch value := x.(type) {
 	case string:
 		key = value
 	case Row:
-		key = value.GetKey()
-		row.Id = value.GetId()
-		row.mergeMetadata(value.Metadata())
-		if (row.Data == nil) {
-			row.Data = value.GetData()
+		doc.key = value.GetKey()
+		doc.Id = value.GetId()
+		doc.Type = value.GetType()
+		if (doc.Data == nil) {
+			doc.Data = value.GetData()
 		}
+		doc.mergeMetadata(value.Metadata())
 
 	case fmt.Stringer:
 		key = value.String()
 	}
 
-	if cas, err := c.bucket.Get(key, row); err != nil {
-		row.fault = err
+	if lock, ok := doc.GetMeta(LOCK).(uint32); ok && lock > 0 {
+		if cas, err := c.bucket.GetAndLock(doc.GetKey(), doc); err != nil {
+			doc.fault = err
+		} else {
+			doc.Meta[CAS] = cas
+		}
+	} else if cas, err := c.bucket.Get(key, doc); err != nil {
+		doc.fault = err
 	} else {
-		row.Meta[CAS] = cas
+		doc.Meta[CAS] = cas
 	}
 
-	return row
+	return doc
 }
 
 func (c *CouchbaseStore) Replace(xs ... interface{}) ([]Row, bool) {
