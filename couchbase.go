@@ -162,11 +162,10 @@ func (c *CouchbaseStore) CreateOne(x interface{}) Row {
 
 	if row, ok := x.(Row); ok {
 
+		doc.key = row.GetKey()
 		doc.Id = row.GetId()
 		doc.Type = row.GetType()
 		doc.Data = row.GetData()
-
-		doc.key = row.GetKey()
 
 		if value, ok := row.GetMeta(TTL).(uint32); ok {
 			expiry = value
@@ -411,7 +410,7 @@ func (c *CouchbaseStore) DestroyOne(x interface{}) Row {
 		doc.key = value.GetKey()
 		doc.Id = value.GetId()
 		doc.Type = value.GetType()
-
+		doc.Data = value.GetData()
 		cas = value.GetMeta(CAS).(gocb.Cas)
 	case fmt.Stringer:
 		doc.key = value.String()
