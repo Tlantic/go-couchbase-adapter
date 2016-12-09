@@ -20,7 +20,6 @@ var (
 var mu = sync.Mutex{}
 var clusters = map[string]*gocb.Cluster{}
 
-
 // Assert interface implementation
 var _ Database = (*CouchbaseStore)(nil)
 
@@ -51,16 +50,16 @@ func NewCouchbaseStore(host, bucketName, bucketPassword string) (*CouchbaseStore
 	}
 }
 
-func ( c *CouchbaseStore ) Close() {
+func (c *CouchbaseStore) Close() {
 	if c.bucket != nil {
 		c.bucket.Close()
 	}
 }
 
-func ( c *CouchbaseStore ) NewRow(id string) Row {
+func (c *CouchbaseStore) NewRow(id string) Row {
 	return newDoc(id)
 }
-func ( c *CouchbaseStore ) NewQuery(statement string) Query {
+func (c *CouchbaseStore) NewQuery(statement string) Query {
 	return newQuery(statement)
 }
 
@@ -72,7 +71,7 @@ func (c *CouchbaseStore) SetName(name string) error {
 	return nil
 }
 
-func (c *CouchbaseStore) Create(xs ... interface{}) ([]Row, bool) {
+func (c *CouchbaseStore) Create(xs ...interface{}) ([]Row, bool) {
 
 	isOk := true
 	length := len(xs)
@@ -89,7 +88,7 @@ func (c *CouchbaseStore) Create(xs ... interface{}) ([]Row, bool) {
 		switch value := xs[i].(type) {
 		case string:
 			bulkOps[i] = &gocb.InsertOp{
-				Key: value,
+				Key:   value,
 				Value: doc,
 			}
 		case Row:
@@ -112,14 +111,14 @@ func (c *CouchbaseStore) Create(xs ... interface{}) ([]Row, bool) {
 			}
 
 			bulkOps[i] = &gocb.InsertOp{
-				Key: doc.GetKey(),
-				Value: doc,
+				Key:    doc.GetKey(),
+				Value:  doc,
 				Expiry: expiry,
-				Cas: cas,
+				Cas:    cas,
 			}
 		case fmt.Stringer:
 			bulkOps[i] = &gocb.InsertOp{
-				Key: value.String(),
+				Key:   value.String(),
 				Value: doc,
 			}
 		default:
@@ -193,7 +192,7 @@ func (c *CouchbaseStore) Read(xs ...interface{}) ([]Row, bool) {
 		switch value := xs[i].(type) {
 		case string:
 			bulkOps[i] = &gocb.GetOp{
-				Key: value,
+				Key:   value,
 				Value: doc,
 			}
 		case Row:
@@ -206,13 +205,13 @@ func (c *CouchbaseStore) Read(xs ...interface{}) ([]Row, bool) {
 			cas, _ := value.GetMeta(CAS).(gocb.Cas)
 
 			bulkOps[i] = &gocb.GetOp{
-				Key: doc.GetKey(),
-				Cas: cas,
+				Key:   doc.GetKey(),
+				Cas:   cas,
 				Value: doc,
 			}
 		case fmt.Stringer:
 			bulkOps[i] = &gocb.GetOp{
-				Key: value.String(),
+				Key:   value.String(),
 				Value: doc,
 			}
 		default:
@@ -241,38 +240,36 @@ func (c *CouchbaseStore) ReadOne(x interface{}) Row {
 }
 func (c *CouchbaseStore) ReadOneWithType(x interface{}, out interface{}) Row {
 
-	var key string
 	doc := newDoc("")
 	doc.Data = out
 
 	switch value := x.(type) {
 	case string:
-		key = value
+		doc.key = value
 	case Row:
 
 		doc.key = value.GetKey()
 		doc.Id = value.GetId()
 		doc.Type = value.GetType()
-		if (doc.Data == nil) {
+		if doc.Data == nil {
 			doc.Data = value.GetData()
 		}
 		doc.mergeMetadata(value.Metadata())
-		key = doc.GetKey()
 	case fmt.Stringer:
-		key = value.String()
+		doc.key = value.String()
 	}
 
 
 
 	if lock, ok := doc.GetMeta(LOCK).(uint32); ok && lock > 0 {
 		var locktime uint32
-		locktime , _ = doc.GetMeta(TIMEOUT).(uint32)
-		if cas, err := c.bucket.GetAndLock(key, locktime, doc); err != nil {
+		locktime, _ = doc.GetMeta(TIMEOUT).(uint32)
+		if cas, err := c.bucket.GetAndLock(doc.GetKey(), locktime, doc); err != nil {
 			doc.fault = err
 		} else {
 			doc.Meta[CAS] = cas
 		}
-	} else if cas, err := c.bucket.Get(key, doc); err != nil {
+	} else if cas, err := c.bucket.Get(doc.GetKey(), doc); err != nil {
 		doc.fault = err
 	} else {
 		doc.Meta[CAS] = cas
@@ -281,7 +278,7 @@ func (c *CouchbaseStore) ReadOneWithType(x interface{}, out interface{}) Row {
 	return doc
 }
 
-func (c *CouchbaseStore) Replace(xs ... interface{}) ([]Row, bool) {
+func (c *CouchbaseStore) Replace(xs ...interface{}) ([]Row, bool) {
 
 	isOk := true
 	length := len(xs)
@@ -307,9 +304,9 @@ func (c *CouchbaseStore) Replace(xs ... interface{}) ([]Row, bool) {
 			expiry, _ := value.GetMeta(TTL).(uint32)
 
 			bulkOps[i] = &gocb.ReplaceOp{
-				Key: doc.GetKey(),
-				Cas: cas,
-				Value: doc,
+				Key:    doc.GetKey(),
+				Cas:    cas,
+				Value:  doc,
 				Expiry: expiry,
 			}
 
@@ -376,7 +373,7 @@ func (c *CouchbaseStore) ReplaceOne(x interface{}) Row {
 	return doc
 }
 
-func (c *CouchbaseStore) Update(xs ... interface{}) ([]Row, bool) {
+func (c *CouchbaseStore) Update(xs ...interface{}) ([]Row, bool) {
 	var faulted bool
 
 	var length int = len(xs)
@@ -395,7 +392,7 @@ func (c *CouchbaseStore) UpdateOne(x interface{}) Row {
 	}
 }
 
-func (c *CouchbaseStore) Destroy(xs...interface{}) ([]Row, bool) {
+func (c *CouchbaseStore) Destroy(xs ...interface{}) ([]Row, bool) {
 	var faulted bool
 
 	var length int = len(xs)
@@ -414,7 +411,7 @@ func (c *CouchbaseStore) DestroyOne(x interface{}) Row {
 
 	switch value := x.(type) {
 	case string:
-		doc.Id = value
+		doc.key = value
 	case Row:
 
 		doc.key = value.GetKey()
@@ -441,21 +438,21 @@ func (c *CouchbaseStore) Exec(q Query) (QueryResult, error) {
 	n1qlquery := gocb.NewN1qlQuery(q.GetStatement())
 
 	if value, ok := q.GetMeta(ADHOC).(bool); ok {
-			n1qlquery.AdHoc(value)
-		}
+		n1qlquery.AdHoc(value)
+	}
 
 	if value, ok := q.GetMeta(CONSISTENCY).(int); ok {
-			n1qlquery.Consistency(gocb.ConsistencyMode(value))
-		}
+		n1qlquery.Consistency(gocb.ConsistencyMode(value))
+	}
 
 	if value, ok := q.GetMeta(TIMEOUT).(time.Duration); ok {
-			n1qlquery.Timeout(value)
-		}
+		n1qlquery.Timeout(value)
+	}
 
 	if results, err := c.bucket.ExecuteN1qlQuery(n1qlquery, params); err != nil {
-			return nil, err
-		} else {
-			return newQueryResult(q, results), nil
-		}
+		return nil, err
+	} else {
+		return newQueryResult(q, results), nil
+	}
 
 }
