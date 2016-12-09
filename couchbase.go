@@ -46,8 +46,9 @@ func NewCouchbaseStore(host, bucketName, bucketPassword string) (*CouchbaseStore
 
 	if b, err := clust.OpenBucket(bucketName, bucketPassword); err == nil {
 		return &CouchbaseStore{name: "couchbase", bucket: b }, nil
+	} else {
+		return nil, err
 	}
-	return nil, err
 }
 
 func ( c *CouchbaseStore ) Close() {
@@ -248,6 +249,7 @@ func (c *CouchbaseStore) ReadOneWithType(x interface{}, out interface{}) Row {
 	case string:
 		key = value
 	case Row:
+
 		doc.key = value.GetKey()
 		doc.Id = value.GetId()
 		doc.Type = value.GetType()
@@ -255,13 +257,17 @@ func (c *CouchbaseStore) ReadOneWithType(x interface{}, out interface{}) Row {
 			doc.Data = value.GetData()
 		}
 		doc.mergeMetadata(value.Metadata())
-
+		key = doc.GetKey()
 	case fmt.Stringer:
 		key = value.String()
 	}
 
+
+
 	if lock, ok := doc.GetMeta(LOCK).(uint32); ok && lock > 0 {
-		if cas, err := c.bucket.GetAndLock(doc.GetKey(), doc); err != nil {
+		var locktime uint32
+		locktime , _ = doc.GetMeta(TIMEOUT).(uint32)
+		if cas, err := c.bucket.GetAndLock(key, locktime, doc); err != nil {
 			doc.fault = err
 		} else {
 			doc.Meta[CAS] = cas
