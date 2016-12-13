@@ -28,7 +28,14 @@ type doc struct {
 	Data  interface{}                 `json:"data"`
 	Meta  map[string]interface{}      `json:"meta"`
 }
-
+func (row *doc) mergeMetadata(src map[string]interface{})  {
+ for k, v := range src {
+	 if (row.Meta[k] == nil) {
+		 row.Meta[k] = v
+	 }
+ }
+}
+//noinspection ALL
 func newDoc(id string) *doc {
 	return &doc{
 		Id: id,
@@ -38,17 +45,22 @@ func newDoc(id string) *doc {
 	}
 }
 
+
 func (row *doc) GetKey() string {
 	if row.key == "" {
-		buf := bytes.NewBufferString(row.GetType())
-		buf.WriteString("::")
-		buf.WriteString(row.Id)
-		return buf.String()
+		if row.Data != nil {
+			buf := bytes.NewBufferString(row.GetType())
+			buf.WriteString("::")
+			buf.WriteString(row.Id)
+			return buf.String()
+		} else {
+			return row.Id
+		}
 	}
 	return row.key
 }
 func (row *doc) SetKey(value string) {
-	row.Id = value
+	row.key = value
 }
 
 func (row *doc) GetId() string {
@@ -60,7 +72,7 @@ func (row *doc) SetId(value string) {
 
 func (row *doc) GetType() string {
 	if (row.Type == "" && row.Data != nil) {
-		return strings.ToLower(reflect.TypeOf(row.Data).Name())
+		return strings.ToLower(reflect.TypeOf(row.Data).Elem().Name())
 	}
 	return row.Type
 }
@@ -80,6 +92,13 @@ func (doc *doc) SetMeta(key string, value interface{}) {
 }
 func (doc *doc) GetMeta(key string) interface{} {
 	return doc.Meta[key]
+}
+func (doc *doc) Metadata() map[string]interface{} {
+	cpy := make(map[string]interface{})
+	for k,v := range doc.Meta {
+		cpy[k] = v
+	}
+	return cpy
 }
 
 func (doc *doc) CreatedOn() *time.Time {

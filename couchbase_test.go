@@ -71,7 +71,7 @@ func TestCouchbaseStore_CreateOne(t *testing.T) {
 		d := newDoc(uuid.NewV4().String())
 		d.SetType("test")
 		d.SetExpiry(5)
-		d.SetData(User{
+		d.SetData(&User{
 			Username:"username",
 			Password: "password",
 		})
@@ -103,7 +103,7 @@ func TestCouchbaseStore_ReadOneWithType(t *testing.T) {
 	} else {
 		defer store.Close()
 
-		record := User{
+		record := &User{
 			Username:"username",
 			Password: "password",
 		}
@@ -137,7 +137,7 @@ func TestCouchbaseStore_ReadOne(t *testing.T) {
 	} else {
 		defer store.Close()
 
-		record := User{
+		record := &User{
 			Username:"username",
 			Password: "password",
 		}
