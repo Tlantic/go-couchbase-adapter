@@ -4,13 +4,13 @@ import (
 	"time"
 	"bytes"
 	"encoding/json"
-	"github.com/Tlantic/mrs-integration-domain/storage"
+	"github.com/Tlantic/go-nosql/database"
 	"strings"
 	"reflect"
 )
 
 // Assert interface implementation
-var _ storage.Row = (*doc)(nil)
+var _ database.Row = (*doc)(nil)
 
 type raw struct {
 	Id   string                        `json:"_uId"`
@@ -40,7 +40,7 @@ func newDoc(id string) *doc {
 	return &doc{
 		Id: id,
 		Meta: map[string]interface{}{
-			storage.TTL: new(uint32),
+			database.TTL: new(uint32),
 		},
 	}
 }
@@ -102,7 +102,7 @@ func (doc *doc) Metadata() map[string]interface{} {
 }
 
 func (doc *doc) CreatedOn() *time.Time {
-	switch value := doc.Meta[storage.CREATEDON].(type) {
+	switch value := doc.Meta[database.CREATEDON].(type) {
 	case time.Time:
 		return &value
 	case int64:
@@ -113,7 +113,7 @@ func (doc *doc) CreatedOn() *time.Time {
 	}
 }
 func (doc *doc) UpdatedOn() *time.Time {
-	switch value := doc.Meta[storage.UPDATEDON].(type) {
+	switch value := doc.Meta[database.UPDATEDON].(type) {
 	case time.Time:
 		return &value
 	case int64:
@@ -125,7 +125,7 @@ func (doc *doc) UpdatedOn() *time.Time {
 }
 
 func (doc *doc) SetExpiry(time uint32) {
-	doc.Meta[storage.TTL] = time
+	doc.Meta[database.TTL] = time
 }
 
 func (doc *doc) IsFaulted() bool {
@@ -142,22 +142,22 @@ func (doc *doc) MarshalJSON() ([]byte, error) {
 		Meta: doc.Meta,
 	}
 
-	switch value := pre.Meta[storage.CREATEDON].(type) {
+	switch value := pre.Meta[database.CREATEDON].(type) {
 	case time.Time:
-		pre.Meta[storage.CREATEDON] = value.UnixNano()
+		pre.Meta[database.CREATEDON] = value.UnixNano()
 	case int64:
-		pre.Meta[storage.CREATEDON] = value
+		pre.Meta[database.CREATEDON] = value
 	default:
-		delete(pre.Meta, storage.CREATEDON)
+		delete(pre.Meta, database.CREATEDON)
 	}
 
-	switch value := pre.Meta[storage.UPDATEDON].(type) {
+	switch value := pre.Meta[database.UPDATEDON].(type) {
 	case time.Time:
-		pre.Meta[storage.UPDATEDON] = value.UnixNano()
+		pre.Meta[database.UPDATEDON] = value.UnixNano()
 	case int64:
-		pre.Meta[storage.UPDATEDON] = value
+		pre.Meta[database.UPDATEDON] = value
 	default:
-		delete(pre.Meta, storage.UPDATEDON)
+		delete(pre.Meta, database.UPDATEDON)
 	}
 
 	if data, err := json.Marshal(doc.Data); err != nil {
@@ -190,22 +190,22 @@ func (doc *doc) UnmarshalJSON(data []byte) error {
 	}
 
 	doc.Meta = pre.Meta
-	cdate := pre.Meta[storage.CREATEDON]
+	cdate := pre.Meta[database.CREATEDON]
 	if ( cdate != nil ) {
 		switch value := cdate.(type) {
 		case json.Number:
 			if value, err := value.Int64(); err == nil {
-				doc.Meta[storage.CREATEDON] = time.Unix(0, value)
+				doc.Meta[database.CREATEDON] = time.Unix(0, value)
 			}
 		}
 	}
 
-	udate := pre.Meta[storage.UPDATEDON]
+	udate := pre.Meta[database.UPDATEDON]
 	if ( udate != nil ) {
 		switch value := udate.(type) {
 		case json.Number:
 			if value, err := value.Int64(); err == nil {
-				doc.Meta[storage.UPDATEDON] = time.Unix(0, value)
+				doc.Meta[database.UPDATEDON] = time.Unix(0, value)
 			}
 		}
 	}

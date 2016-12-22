@@ -9,7 +9,7 @@ import (
 	"github.com/couchbase/gocb"
 	"github.com/twinj/uuid"
 
-	. "github.com/Tlantic/mrs-integration-domain/storage"
+	. "github.com/Tlantic/go-nosql/database"
 )
 
 //noinspection GoUnusedGlobalVariable

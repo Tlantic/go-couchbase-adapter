@@ -3,8 +3,8 @@ package couchbase
 import (
 	"testing"
 	"errors"
-	"github.com/Tlantic/mrs-integration-domain/storage"
 	"time"
+	"github.com/Tlantic/go-nosql/database"
 )
 
 
@@ -79,20 +79,20 @@ func TestDoc_CreatedOn(t *testing.T) {
 		t.Fail()
 	}
 
-	doc.SetMeta(storage.CREATEDON, "string")
+	doc.SetMeta(database.CREATEDON, "string")
 	ts = doc.CreatedOn()
 	if (ts != nil) {
 		t.Fail()
 	}
 
 
-	doc.SetMeta(storage.CREATEDON, now.UnixNano())
+	doc.SetMeta(database.CREATEDON, now.UnixNano())
 	ts = doc.CreatedOn()
 	if (*ts != now) {
 		t.Fail()
 	}
 
-	doc.SetMeta(storage.CREATEDON, now)
+	doc.SetMeta(database.CREATEDON, now)
 	ts = doc.CreatedOn()
 	if (*ts != now) {
 		t.Fail()
@@ -128,7 +128,7 @@ func TestDoc_SetExpiry(t *testing.T) {
 	doc := newDoc("")
 
 	doc.SetExpiry(1)
-	if doc.GetMeta(storage.TTL).(uint32) != 1 {
+	if doc.GetMeta(database.TTL).(uint32) != 1 {
 		t.FailNow()
 	}
 
