@@ -5,13 +5,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"github.com/couchbase/gocb"
-	"github.com/Tlantic/mrs-integration-domain/storage"
+	"github.com/Tlantic/go-nosql/database"
 )
 
 // Assert interface implementation
 var (
-	_ storage.QueryResult = (*queryResult)(nil)
-	_ storage.Query = (*query)(nil)
+	_ database.QueryResult = (*queryResult)(nil)
+	_ database.Query = (*query)(nil)
 )
 
 
@@ -52,12 +52,12 @@ func (q *query) GetMeta(key string) interface{} {
 
 
 type queryResult struct {
-	storage.Query
+	database.Query
 	locker    sync.Mutex
 	index     uint64
 	data      [][]byte
 }
-func newQueryResult( q storage.Query, r gocb.QueryResults) *queryResult {
+func newQueryResult( q database.Query, r gocb.QueryResults) *queryResult {
 	data := make([][]byte, 0)
 	for b := r.NextBytes(); b != nil; b = r.NextBytes() {
 		data = append(data, b)
@@ -122,14 +122,14 @@ func (q *queryResult) OneBytes() []byte {
 	return nil
 }
 
-func (q *queryResult) Take( n int ) storage.QueryResult {
+func (q *queryResult) Take( n int ) database.QueryResult {
 	return &queryResult{
 		Query: q.Query,
 		data: q.unshiftN( n ),
 	}
 }
 
-func (q *queryResult) Skip( n int ) storage.QueryResult {
+func (q *queryResult) Skip( n int ) database.QueryResult {
 	q.unshiftN( n )
 	return q
 }
