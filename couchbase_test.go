@@ -207,6 +207,10 @@ func TestCouchbaseStore_Read(t *testing.T) {
 	}
 }
 
+func TestCouchbaseStore_Replace(t *testing.T) {
+
+}
+
 func TestCouchbaseStore_Exec(t *testing.T) {
 	store, err := NewCouchbaseStore(os.Getenv("COUCHBASE_HOST"), os.Getenv("COUCHBASE_BUCKET"), os.Getenv("COUCHBASE_PASSWORD"))
 	if ( err != nil ) {
