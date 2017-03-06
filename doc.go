@@ -1,40 +1,44 @@
 package couchbase
 
 import (
-	"time"
 	"bytes"
 	"encoding/json"
-	"github.com/Tlantic/go-nosql/database"
-	"strings"
 	"reflect"
+	"strings"
+	"time"
+
+	"github.com/Tlantic/go-nosql/database"
 )
 
 // Assert interface implementation
 var _ database.Row = (*doc)(nil)
 
 type raw struct {
-	Id   string                        `json:"_uId"`
-	Type string                        `json:"_type"`
-	Data json.RawMessage               `json:"data"`
-	Meta map[string]interface{}        `json:"meta"`
+	Id   string                 `json:"_uId"`
+	Type string                 `json:"_type"`
+	Data json.RawMessage        `json:"data"`
+	Meta map[string]interface{} `json:"meta"`
 }
 
 type doc struct {
 	key   string
 	fault error
 
-	Id    string                        `json:"_uId"`
-	Type  string                        `json:"_type"`
-	Data  interface{}                 `json:"data"`
-	Meta  map[string]interface{}      `json:"meta"`
+	Id   string                 `json:"_uId"`
+	Type string                 `json:"_type"`
+	Data interface{}            `json:"data"`
+	Meta map[string]interface{} `json:"meta"`
 }
-func (row *doc) mergeMetadata(src map[string]interface{})  {
- for k, v := range src {
-	 if (row.Meta[k] == nil) {
-		 row.Meta[k] = v
-	 }
- }
+
+func (row *doc) mergeMetadata(src map[string]interface{}) {
+	for k, v := range src {
+		if row.Meta[k] == nil {
+			row.Meta[k] = v
+		}
+
+	}
 }
+
 //noinspection ALL
 func newDoc(id string) *doc {
 	return &doc{
@@ -44,7 +48,6 @@ func newDoc(id string) *doc {
 		},
 	}
 }
-
 
 func (row *doc) GetKey() string {
 	if row.key == "" {
@@ -71,7 +74,7 @@ func (row *doc) SetId(value string) {
 }
 
 func (row *doc) GetType() string {
-	if (row.Type == "" && row.Data != nil) {
+	if row.Type == "" && row.Data != nil {
 		return strings.ToLower(reflect.TypeOf(row.Data).Elem().Name())
 	}
 	return row.Type
@@ -95,7 +98,7 @@ func (doc *doc) GetMeta(key string) interface{} {
 }
 func (doc *doc) Metadata() map[string]interface{} {
 	cpy := make(map[string]interface{})
-	for k,v := range doc.Meta {
+	for k, v := range doc.Meta {
 		cpy[k] = v
 	}
 	return cpy
@@ -137,7 +140,7 @@ func (doc *doc) Fault() error {
 
 func (doc *doc) MarshalJSON() ([]byte, error) {
 	pre := raw{
-		Id: doc.GetId(),
+		Id:   doc.GetId(),
 		Type: doc.GetType(),
 		Meta: doc.Meta,
 	}
@@ -191,7 +194,7 @@ func (doc *doc) UnmarshalJSON(data []byte) error {
 
 	doc.Meta = pre.Meta
 	cdate := pre.Meta[database.CREATEDON]
-	if ( cdate != nil ) {
+	if cdate != nil {
 		switch value := cdate.(type) {
 		case json.Number:
 			if value, err := value.Int64(); err == nil {
@@ -201,7 +204,7 @@ func (doc *doc) UnmarshalJSON(data []byte) error {
 	}
 
 	udate := pre.Meta[database.UPDATEDON]
-	if ( udate != nil ) {
+	if udate != nil {
 		switch value := udate.(type) {
 		case json.Number:
 			if value, err := value.Int64(); err == nil {
