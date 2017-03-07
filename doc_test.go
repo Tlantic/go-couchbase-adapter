@@ -1,12 +1,12 @@
 package couchbase
 
 import (
-	"testing"
 	"errors"
+	"testing"
 	"time"
+
 	"github.com/Tlantic/go-nosql/database"
 )
-
 
 func TestDoc_SetKey(t *testing.T) {
 	key := "1337"
@@ -85,7 +85,6 @@ func TestDoc_CreatedOn(t *testing.T) {
 		t.Fail()
 	}
 
-
 	doc.SetMeta(database.CREATEDON, now.UnixNano())
 	ts = doc.CreatedOn()
 	if (*ts != now) {
@@ -117,7 +116,6 @@ func TestDoc_Fault(t *testing.T) {
 	doc := newDoc("")
 	fault := errors.New("errMessage")
 	doc.fault = fault
-
 
 	if ( doc.Fault() != fault ) {
 		t.FailNow()
