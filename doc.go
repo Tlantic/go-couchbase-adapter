@@ -32,20 +32,15 @@ type doc struct {
 
 func (row *doc) mergeMetadata(src map[string]interface{}) {
 	for k, v := range src {
-		if row.Meta[k] == nil {
-			row.Meta[k] = v
-		}
-
+		row.Meta[k] = v
 	}
 }
 
 //noinspection ALL
 func newDoc(id string) *doc {
 	return &doc{
-		Id: id,
-		Meta: map[string]interface{}{
-			database.TTL: new(uint32),
-		},
+		Id:   id,
+		Meta: map[string]interface{}{},
 	}
 }
 
@@ -105,7 +100,7 @@ func (doc *doc) Metadata() map[string]interface{} {
 }
 
 func (doc *doc) CreatedOn() *time.Time {
-	switch value := doc.Meta[database.CREATEDON].(type) {
+	switch value := doc.GetMeta(database.CREATEDON).(type) {
 	case time.Time:
 		return &value
 	case int64:
@@ -116,7 +111,7 @@ func (doc *doc) CreatedOn() *time.Time {
 	}
 }
 func (doc *doc) UpdatedOn() *time.Time {
-	switch value := doc.Meta[database.UPDATEDON].(type) {
+	switch value := doc.GetMeta(database.UPDATEDON).(type) {
 	case time.Time:
 		return &value
 	case int64:
@@ -128,7 +123,11 @@ func (doc *doc) UpdatedOn() *time.Time {
 }
 
 func (doc *doc) SetExpiry(time uint32) {
-	doc.Meta[database.TTL] = time
+	doc.SetMeta(database.TTL, time)
+}
+
+func (doc *doc) SetLock(ltime interface{}) {
+	doc.SetMeta(database.LOCK, makeUint32(ltime))
 }
 
 func (doc *doc) IsFaulted() bool {
