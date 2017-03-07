@@ -2,7 +2,6 @@ package couchbase
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -12,7 +11,6 @@ import (
 )
 
 func _firstFault(rows []database.Row) error {
-	fmt.Println("_firstFault")
 	for _, v := range rows {
 		if v.IsFaulted() {
 			return v.Fault()
@@ -108,23 +106,20 @@ func TestCouchbaseStore_Destroy(t *testing.T) {
 		}
 
 		d1 := newDoc(uuid.NewV4().String())
-		d1.SetType("test")
-		d1.SetExpiry(5)
+		d1.SetExpiry(10)
 		d1.SetData(record1)
 
 		d2 := newDoc(uuid.NewV4().String())
-		d2.SetType("test")
-		d2.SetExpiry(5)
+		d2.SetExpiry(10)
 		d2.SetData(record1)
 
 		d3 := newDoc(uuid.NewV4().String())
-		d3.SetType("test")
-		d3.SetExpiry(5)
+		d3.SetExpiry(10)
 		d3.SetData(record1)
 
-		if rs, ok := store.Create(d1, d2, d3); !ok {
-			t.Error(_firstFault(rs))
-		} else if rs, ok := store.Destroy(rs); !ok {
+		if _, ok := store.Create(d1, d2, d3); !ok {
+			t.Error("Error creating records...")
+		} else if rs, ok := store.Destroy(d1, d2, d3); !ok {
 			t.Error(_firstFault(rs))
 		}
 	}
@@ -138,7 +133,6 @@ func TestCouchbaseStore_CreateOne(t *testing.T) {
 		defer store.Close()
 
 		d := newDoc(uuid.NewV4().String())
-		d.SetType("test")
 		d.SetExpiry(5)
 		d.SetData(&User{
 			Username: "username",
@@ -180,7 +174,6 @@ func TestCouchbaseStore_ReadOneWithType(t *testing.T) {
 			Password: "password",
 		}
 		d := newDoc(uuid.NewV4().String())
-		d.SetType("test")
 		d.SetExpiry(5)
 		d.SetData(record)
 
@@ -214,7 +207,6 @@ func TestCouchbaseStore_ReadOne(t *testing.T) {
 			Password: "password",
 		}
 		d := newDoc(uuid.NewV4().String())
-		d.SetType("test")
 		d.SetExpiry(5)
 		d.SetData(record)
 
@@ -253,13 +245,11 @@ func TestCouchbaseStore_Read(t *testing.T) {
 		}
 
 		d1 := newDoc(uuid.NewV4().String())
-		d1.SetType("test")
-		d1.SetExpiry(5)
+		d1.SetExpiry(2)
 		d1.SetData(record1)
 
 		d2 := newDoc(uuid.NewV4().String())
-		d2.SetType("test")
-		d2.SetExpiry(5)
+		d2.SetExpiry(2)
 		d2.SetData(record2)
 
 		if res := store.CreateOne(d1); res.IsFaulted() {
@@ -276,6 +266,31 @@ func TestCouchbaseStore_Read(t *testing.T) {
 				}
 			}
 		}
+
+		d1 = newDoc(uuid.NewV4().String())
+		d1.SetExpiry(5)
+		d1.SetData(record1)
+
+		if d1 := store.CreateOne(d1); d1.IsFaulted() {
+			t.Error(d1.Fault())
+		}
+
+		d1.SetMeta(database.LOCK, 15)
+		if ld := store.ReadOne(d1); ld.IsFaulted() {
+			t.Error(ld.Fault())
+		} else {
+			n := newDoc(ld.GetId())
+			n.SetData(&User{
+				Username: "___",
+				Password: "___",
+			})
+			if r := store.ReplaceOne(n); !r.IsFaulted() {
+				t.Error("Expected document to be locked and it isnt.")
+			} else if ld = store.ReadOne(ld); ld.IsFaulted() {
+				t.Error(ld.Fault())
+			}
+		}
+
 	}
 }
 
@@ -302,12 +317,10 @@ func TestCouchbaseStore_Exec(t *testing.T) {
 		}
 
 		d1 := newDoc(uuid.NewV4().String())
-		d1.SetType("test")
 		d1.SetExpiry(5)
 		d1.SetData(record1)
 
 		d2 := newDoc(uuid.NewV4().String())
-		d2.SetType("test")
 		d2.SetExpiry(5)
 		d2.SetData(record2)
 
@@ -319,7 +332,7 @@ func TestCouchbaseStore_Exec(t *testing.T) {
 			}
 		}
 		time.Sleep(1000 * time.Millisecond)
-		q := store.NewQuery("SELECT * FROM `m` WHERE _type=\"test\"")
+		q := store.NewQuery("SELECT * FROM `test` WHERE _type=\"test\"")
 		if res, err := store.Exec(q); err != nil {
 			t.Error(err)
 		} else {
@@ -330,13 +343,11 @@ func TestCouchbaseStore_Exec(t *testing.T) {
 				var result struct {
 					Row struct {
 						Data User `json:"data"`
-					} `json:"m"`
+					} `json:"test"`
 				}
 				json.Unmarshal(data, &result)
 				users = append(users, result.Row.Data)
 			})
-			fmt.Println(users)
-
 		}
 
 	}
