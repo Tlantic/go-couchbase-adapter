@@ -46,7 +46,7 @@ func newDoc(id string) *doc {
 
 func (row *doc) GetKey() string {
 	if row.key == "" {
-		if row.Data != nil {
+		if t := row.GetType(); t != "" {
 			buf := bytes.NewBufferString(row.GetType())
 			buf.WriteString("::")
 			buf.WriteString(row.Id)
