@@ -27,6 +27,56 @@ type CouchbaseStore struct {
 	bucket *gocb.Bucket
 }
 
+func makeCreateError(err error) (err2 error) {
+
+	switch err {
+	case gocb.ErrKeyExists:
+		err2 = AlreadyExistsError{err}
+	case gocb.ErrTooBig:
+		err2 = TooBigError{err}
+	case gocb.ErrNotStored:
+		err2 = NotStoredError{err}
+	case gocb.ErrTmpFail:
+		err2 = TemporaryFailureError{err}
+	case gocb.ErrTimeout:
+		err2 = TimeoutError{err}
+	default:
+		err2 = InternalError{err}
+	}
+
+	return
+}
+func makeReadError(err error) (err2 error) {
+
+	switch err {
+	case gocb.ErrTmpFail:
+		err2 = LockedError{err}
+	case gocb.ErrKeyNotFound:
+		err2 = NotFoundError{err}
+	case gocb.ErrTimeout:
+		err2 = TimeoutError{err}
+	default:
+		err2 = InternalError{err}
+	}
+
+	return
+}
+func makeMutationError(err error) (err2 error) {
+
+	switch err {
+	case gocb.ErrKeyExists:
+		err2 = LockedError{err}
+	case gocb.ErrKeyNotFound:
+		err2 = NotFoundError{err}
+	case gocb.ErrTimeout:
+		err2 = TimeoutError{err}
+	default:
+		err2 = InternalError{err}
+	}
+
+	return
+}
+
 //noinspection ALL
 func NewCouchbaseStore(host, bucketName, bucketPassword string) (*CouchbaseStore, error) {
 	defer mu.Unlock()
@@ -111,7 +161,7 @@ func (c *CouchbaseStore) Create(xs ...interface{}) ([]Row, bool) {
 				Value: doc,
 			}
 		default:
-			doc.fault = errors.New("Unsupported type. Expecting string, Stringer or Row.")
+			doc.fault = InvalidArgsError{errors.New("Unsupported type. Expecting string, Stringer or Row.")}
 			ok = false
 		}
 	}
@@ -123,10 +173,10 @@ func (c *CouchbaseStore) Create(xs ...interface{}) ([]Row, bool) {
 		op := bulkOps[i].(*gocb.InsertOp)
 		doc := rows[i].(*doc)
 		doc.SetMeta(CAS, op.Cas)
-		doc.SetMeta(EXPIRY, op.Expiry)
+		doc.SetMeta(TTL, nil)
 		if op.Err != nil {
 			ok = false
-			doc.fault = op.Err
+			doc.fault = makeCreateError(op.Err)
 		}
 	}
 
@@ -154,9 +204,10 @@ func (c *CouchbaseStore) CreateOne(x interface{}) Row {
 	}
 
 	if cas, err := c.bucket.Insert(doc.GetKey(), doc, makeUint32(doc.GetMeta(TTL))); err != nil {
-		doc.fault = err
+		doc.fault = makeCreateError(err)
 	} else {
 		doc.SetMeta(CAS, cas)
+		doc.SetMeta(TTL, nil)
 	}
 	return doc
 }
@@ -188,6 +239,18 @@ func (c *CouchbaseStore) Read(xs ...interface{}) ([]Row, bool) {
 
 			cas, _ := value.GetMeta(CAS).(gocb.Cas)
 
+			if lock := value.GetMeta(LOCK); lock != nil {
+				for _, x := range xs {
+					rows := rows[:0]
+					r := c.ReadOneWithType(x, nil)
+					if r.IsFaulted() {
+						ok = false
+					}
+					rows = append(rows, r)
+				}
+				return rows, ok
+			}
+
 			bulkOps[i] = &gocb.GetOp{
 				Key:   doc.GetKey(),
 				Cas:   cas,
@@ -199,7 +262,7 @@ func (c *CouchbaseStore) Read(xs ...interface{}) ([]Row, bool) {
 				Value: doc,
 			}
 		default:
-			doc.fault = errors.New("Unsupported type, expecting string, Stringer or Row.")
+			doc.fault = InvalidArgsError{errors.New("Unsupported type, expecting string, Stringer or Row.")}
 			ok = false
 		}
 	}
@@ -211,9 +274,10 @@ func (c *CouchbaseStore) Read(xs ...interface{}) ([]Row, bool) {
 		op := bulkOps[i].(*gocb.GetOp)
 		doc := rows[i].(*doc)
 		doc.SetMeta(CAS, op.Cas)
+		doc.SetMeta(TTL, nil)
 		if op.Err != nil {
 			ok = false
-			doc.fault = op.Err
+			doc.fault = makeReadError(op.Err)
 		}
 	}
 
@@ -231,7 +295,6 @@ func (c *CouchbaseStore) ReadOneWithType(x interface{}, out interface{}) Row {
 	case string:
 		doc.key = value
 	case Row:
-
 		doc.key = value.GetKey()
 		doc.Id = value.GetId()
 		doc.Type = value.GetType()
@@ -241,18 +304,65 @@ func (c *CouchbaseStore) ReadOneWithType(x interface{}, out interface{}) Row {
 		doc.mergeMetadata(value.Metadata())
 	case fmt.Stringer:
 		doc.key = value.String()
+	default:
+		doc.fault = InvalidArgsError{errors.New("Unsupported type, expecting string, Stringer or Row.")}
+		return doc
 	}
 
 	if ltime := makeUint32(doc.GetMeta(LOCK)); ltime > 0 {
 		if cas, err := c.bucket.GetAndLock(doc.GetKey(), ltime, doc); err != nil {
-			doc.fault = err
+			doc.fault = makeReadError(err)
 		} else {
 			doc.SetMeta(CAS, cas)
 		}
 	} else if cas, err := c.bucket.Get(doc.GetKey(), doc); err != nil {
-		doc.fault = err
+		doc.fault = makeReadError(err)
 	} else {
+		doc.SetMeta(CAS, cas)
+	}
 
+	return doc
+}
+
+func (c *CouchbaseStore) Unlock(xs ...interface{}) ([]Row, bool) {
+	ok := true
+	rows := make([]Row, 0, len(xs))
+	for _, x := range xs {
+		r := c.UnlockOne(x)
+		if r.IsFaulted() {
+			ok = false
+		}
+		rows = append(rows, r)
+	}
+	return rows, ok
+}
+func (c *CouchbaseStore) UnlockOne(x interface{}) Row {
+
+	doc := newDoc("")
+
+	switch value := x.(type) {
+	case string:
+		doc.key = value
+	case Row:
+		doc.key = value.GetKey()
+		doc.Id = value.GetId()
+		doc.Type = value.GetType()
+		if doc.Data == nil {
+			doc.Data = value.GetData()
+		}
+		doc.mergeMetadata(value.Metadata())
+	case fmt.Stringer:
+		doc.key = value.String()
+	default:
+		doc.fault = InvalidArgsError{errors.New("Unsupported type, expecting string, Stringer or Row.")}
+		return doc
+	}
+
+	cas, _ := doc.GetMeta(CAS).(gocb.Cas)
+	if cas, err := c.bucket.Unlock(doc.GetKey(), cas); err != nil {
+		doc.fault = makeReadError(err)
+	} else {
+		doc.SetMeta(TTL, nil)
 		doc.SetMeta(CAS, cas)
 	}
 
@@ -260,6 +370,91 @@ func (c *CouchbaseStore) ReadOneWithType(x interface{}, out interface{}) Row {
 }
 
 func (c *CouchbaseStore) Replace(xs ...interface{}) ([]Row, bool) {
+
+	ok := true
+	length := len(xs)
+	rows := make([]Row, length, length)
+	bulkOps := make([]gocb.BulkOp, length, length)
+	now := time.Now().UTC()
+
+	for i := 0; i < length; i++ {
+		doc := newDoc("")
+		rows[i] = doc
+
+		doc.SetMeta(UPDATEDON, now)
+		doc.SetMeta(CREATEDON, now)
+		if value, ok := xs[i].(Row); ok {
+
+			doc.key = value.GetKey()
+			doc.Id = value.GetId()
+			doc.Type = value.GetType()
+			doc.Data = value.GetData()
+			doc.mergeMetadata(value.Metadata())
+
+			cas, _ := value.GetMeta(CAS).(gocb.Cas)
+
+			bulkOps[i] = &gocb.ReplaceOp{
+				Key:    doc.GetKey(),
+				Cas:    cas,
+				Value:  doc,
+				Expiry: makeUint32(value.GetMeta(TTL)),
+			}
+
+		} else {
+			doc.fault = InvalidArgsError{errors.New("Unsupported type, expecting Row.")}
+			ok = false
+		}
+	}
+
+	if c.bucket.Do(bulkOps) != nil {
+
+		ok = false
+	}
+	for i := 0; i < length; i++ {
+		op := bulkOps[i].(*gocb.ReplaceOp)
+		doc := rows[i].(*doc)
+		doc.SetMeta(TTL, nil)
+		doc.SetMeta(CAS, op.Cas)
+		if op.Err != nil {
+			ok = false
+			doc.fault = makeMutationError(op.Err)
+		}
+	}
+
+	return rows, ok
+}
+func (c *CouchbaseStore) ReplaceOne(x interface{}) Row {
+
+	doc := newDoc("")
+
+	now := time.Now().UTC()
+	doc.SetMeta(UPDATEDON, now)
+	doc.SetMeta(CREATEDON, now)
+	if value, ok := x.(Row); ok {
+
+		doc.key = value.GetKey()
+		doc.Id = value.GetId()
+		doc.Type = value.GetType()
+		doc.Data = value.GetData()
+		doc.mergeMetadata(value.Metadata())
+
+	} else {
+		doc.Id = uuid.NewV4().String()
+		doc.Data = x
+	}
+
+	cas, _ := doc.GetMeta(CAS).(gocb.Cas)
+	if cas, err := c.bucket.Replace(doc.GetKey(), doc, cas, makeUint32(doc.GetMeta(TTL))); err != nil {
+		doc.fault = makeMutationError(err)
+	} else {
+		doc.SetMeta(TTL, nil)
+		doc.SetMeta(CAS, cas)
+	}
+
+	return doc
+}
+
+func (c *CouchbaseStore) Upsert(xs ...interface{}) ([]Row, bool) {
 
 	ok := true
 	length := len(xs)
@@ -282,7 +477,7 @@ func (c *CouchbaseStore) Replace(xs ...interface{}) ([]Row, bool) {
 
 			cas, _ := value.GetMeta(CAS).(gocb.Cas)
 
-			bulkOps[i] = &gocb.ReplaceOp{
+			bulkOps[i] = &gocb.UpsertOp{
 				Key:    doc.GetKey(),
 				Cas:    cas,
 				Value:  doc,
@@ -290,7 +485,7 @@ func (c *CouchbaseStore) Replace(xs ...interface{}) ([]Row, bool) {
 			}
 
 		} else {
-			doc.fault = errors.New("Unsupported type, expecting Row.")
+			doc.fault = InvalidArgsError{errors.New("Unsupported type, expecting Row.")}
 			ok = false
 		}
 	}
@@ -300,20 +495,20 @@ func (c *CouchbaseStore) Replace(xs ...interface{}) ([]Row, bool) {
 	}
 	for i := 0; i < length; i++ {
 
-		op := bulkOps[i].(*gocb.ReplaceOp)
+		op := bulkOps[i].(*gocb.UpsertOp)
 		doc := rows[i].(*doc)
 
 		doc.SetMeta(CAS, op.Cas)
-		doc.SetMeta(TTL, op.Expiry)
+		doc.SetMeta(TTL, nil)
 		if op.Err != nil {
 			ok = false
-			doc.fault = op.Err
+			doc.fault = makeMutationError(op.Err)
 		}
 	}
 
 	return rows, ok
 }
-func (c *CouchbaseStore) ReplaceOne(x interface{}) Row {
+func (c *CouchbaseStore) UpsertOne(x interface{}) Row {
 
 	doc := newDoc("")
 
@@ -335,8 +530,9 @@ func (c *CouchbaseStore) ReplaceOne(x interface{}) Row {
 
 	cas, _ := doc.GetMeta(CAS).(gocb.Cas)
 	if cas, err := c.bucket.Replace(doc.GetKey(), doc, cas, makeUint32(doc.GetMeta(TTL))); err != nil {
-		doc.fault = err
+		doc.fault = makeMutationError(err)
 	} else {
+		doc.SetMeta(TTL, nil)
 		doc.SetMeta(CAS, cas)
 	}
 
@@ -344,19 +540,19 @@ func (c *CouchbaseStore) ReplaceOne(x interface{}) Row {
 }
 
 func (c *CouchbaseStore) Update(xs ...interface{}) ([]Row, bool) {
-
 	ok := true
 	length := len(xs)
 	rows := make([]Row, length, length)
 
 	for i := 0; i < length; i++ {
 		rows[i] = c.UpdateOne(xs[i])
-		ok = ok && !rows[i].IsFaulted()
+		if !rows[i].IsFaulted() {
+			ok = false
+		}
 	}
 	return rows, ok
 }
 func (c *CouchbaseStore) UpdateOne(x interface{}) Row {
-
 	return &doc{
 		fault: errors.New("Not Implemented"),
 	}
@@ -398,7 +594,7 @@ func (c *CouchbaseStore) Destroy(xs ...interface{}) ([]Row, bool) {
 				Key: value.String(),
 			}
 		default:
-			doc.fault = errors.New("Unsupported type, expecting string, Stringer or Row.")
+			doc.fault = InvalidArgsError{errors.New("Unsupported type, expecting string, Stringer or Row.")}
 			ok = false
 		}
 	}
@@ -409,10 +605,11 @@ func (c *CouchbaseStore) Destroy(xs ...interface{}) ([]Row, bool) {
 	for i := 0; i < length; i++ {
 		op := bulkOps[i].(*gocb.RemoveOp)
 		doc := rows[i].(*doc)
+		doc.SetMeta(TTL, nil)
 		doc.SetMeta(CAS, op.Cas)
 		if op.Err != nil {
 			ok = false
-			doc.fault = op.Err
+			doc.fault = makeMutationError(op.Err)
 		}
 	}
 
@@ -435,11 +632,100 @@ func (c *CouchbaseStore) DestroyOne(x interface{}) Row {
 		cas, _ = value.GetMeta(CAS).(gocb.Cas)
 	case fmt.Stringer:
 		doc.key = value.String()
+	default:
+		doc.fault = InvalidArgsError{errors.New("Unsupported type, expecting string, Stringer or Row.")}
+		return doc
 	}
 
 	if cas, err := c.bucket.Remove(doc.GetKey(), cas); err != nil {
-		doc.fault = err
+		doc.fault = makeMutationError(err)
 	} else {
+		doc.SetMeta(TTL, nil)
+		doc.SetMeta(CAS, cas)
+	}
+
+	return doc
+}
+
+func (c *CouchbaseStore) Touch(xs ...interface{}) ([]Row, bool) {
+
+	ok := true
+	length := len(xs)
+	rows := make([]Row, length, length)
+	bulkOps := make([]gocb.BulkOp, length, length)
+
+	for i := 0; i < length; i++ {
+
+		doc := newDoc("")
+		rows[i] = doc
+
+		switch value := xs[i].(type) {
+		case string:
+			bulkOps[i] = &gocb.GetOp{
+				Key:   value,
+				Value: doc,
+			}
+		case Row:
+			doc.key = value.GetKey()
+			doc.Id = value.GetId()
+			doc.Type = value.GetType()
+			doc.Data = value.GetData()
+			doc.mergeMetadata(value.Metadata())
+
+			cas, _ := value.GetMeta(CAS).(gocb.Cas)
+			bulkOps[i] = &gocb.TouchOp{
+				Key:    doc.GetKey(),
+				Cas:    cas,
+				Expiry: makeUint32(value.GetMeta(TTL)),
+			}
+		case fmt.Stringer:
+			bulkOps[i] = &gocb.TouchOp{
+				Key: value.String(),
+			}
+		default:
+			doc.fault = InvalidArgsError{errors.New("Unsupported type, expecting string, Stringer or Row.")}
+			ok = false
+		}
+	}
+
+	if c.bucket.Do(bulkOps) != nil {
+		ok = false
+	}
+	for i := 0; i < length; i++ {
+		op := bulkOps[i].(*gocb.TouchOp)
+		doc := rows[i].(*doc)
+		doc.SetMeta(CAS, op.Cas)
+		doc.SetMeta(TTL, nil)
+		if op.Err != nil {
+			ok = false
+			doc.fault = makeMutationError(op.Err)
+		}
+	}
+
+	return rows, ok
+}
+func (c *CouchbaseStore) TouchOne(x interface{}) Row {
+
+	doc := newDoc("")
+
+	switch value := x.(type) {
+	case string:
+		doc.key = value
+	case Row:
+		doc.key = value.GetKey()
+		doc.Id = value.GetId()
+		doc.Type = value.GetType()
+		doc.Data = value.GetData()
+		doc.mergeMetadata(value.Metadata())
+	case fmt.Stringer:
+		doc.key = value.String()
+	}
+
+	cas, _ := doc.GetMeta(CAS).(gocb.Cas)
+	if cas, err := c.bucket.Touch(doc.GetKey(), cas, makeUint32(doc.GetMeta(TTL))); err != nil {
+		doc.fault = makeMutationError(err)
+	} else {
+		doc.SetMeta(TTL, nil)
 		doc.SetMeta(CAS, cas)
 	}
 
