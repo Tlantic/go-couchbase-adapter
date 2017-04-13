@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"sync"
 
-	"github.com/Tlantic/go-nosql/database"
+	"github.com/Tlantic/go-nosql"
 	"github.com/couchbase/gocb"
 )
 
