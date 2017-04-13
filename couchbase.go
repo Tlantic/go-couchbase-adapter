@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	. "github.com/Tlantic/go-nosql/database"
+	. "github.com/Tlantic/go-nosql"
 	"github.com/couchbase/gocb"
 	"github.com/twinj/uuid"
 )
@@ -20,7 +20,7 @@ var mu = sync.Mutex{}
 var clusters = map[string]*gocb.Cluster{}
 
 // Assert interface implementation
-var _ Database = (*CouchbaseStore)(nil)
+var _ Interface = (*CouchbaseStore)(nil)
 
 type CouchbaseStore struct {
 	name   string
@@ -609,7 +609,7 @@ func (c *CouchbaseStore) Destroy(xs ...interface{}) ([]Row, bool) {
 		doc.SetMeta(CAS, op.Cas)
 		if op.Err != nil {
 			ok = false
-			doc.fault = makeMutationError(op.Err)
+			doc.fault = makeReadError(op.Err)
 		}
 	}
 
@@ -638,7 +638,7 @@ func (c *CouchbaseStore) DestroyOne(x interface{}) Row {
 	}
 
 	if cas, err := c.bucket.Remove(doc.GetKey(), cas); err != nil {
-		doc.fault = makeMutationError(err)
+		doc.fault = makeReadError(err)
 	} else {
 		doc.SetMeta(TTL, nil)
 		doc.SetMeta(CAS, cas)
@@ -698,7 +698,7 @@ func (c *CouchbaseStore) Touch(xs ...interface{}) ([]Row, bool) {
 		doc.SetMeta(TTL, nil)
 		if op.Err != nil {
 			ok = false
-			doc.fault = makeMutationError(op.Err)
+			doc.fault = makeReadError(op.Err)
 		}
 	}
 
@@ -723,7 +723,7 @@ func (c *CouchbaseStore) TouchOne(x interface{}) Row {
 
 	cas, _ := doc.GetMeta(CAS).(gocb.Cas)
 	if cas, err := c.bucket.Touch(doc.GetKey(), cas, makeUint32(doc.GetMeta(TTL))); err != nil {
-		doc.fault = makeMutationError(err)
+		doc.fault = makeReadError(err)
 	} else {
 		doc.SetMeta(TTL, nil)
 		doc.SetMeta(CAS, cas)

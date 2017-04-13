@@ -1,15 +1,17 @@
 package couchbase
 
 import (
+	"bytes"
 	"encoding/json"
+	"github.com/Tlantic/go-nosql"
+	"github.com/twinj/uuid"
 	"os"
+	"strconv"
 	"testing"
 	"time"
-	"bytes"
-	"github.com/Tlantic/go-nosql/database"
-	"github.com/twinj/uuid"
-	"strconv"
 )
+
+
 
 func _firstFault(rows []database.Row) error {
 	for _, v := range rows {
@@ -26,6 +28,8 @@ type User struct {
 	Password string `json:"password"`
 }
 
+
+
 func TestNewCouchbaseStore(t *testing.T) {
 	store, err := NewCouchbaseStore(os.Getenv("COUCHBASE_HOST"), os.Getenv("COUCHBASE_BUCKET"), os.Getenv("COUCHBASE_PASSWORD"))
 	if err != nil {
@@ -38,32 +42,39 @@ func TestNewCouchbaseStore(t *testing.T) {
 func TestCouchbaseStore_Create(t *testing.T) {
 	store, err := NewCouchbaseStore(os.Getenv("COUCHBASE_HOST"), os.Getenv("COUCHBASE_BUCKET"), os.Getenv("COUCHBASE_PASSWORD"))
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	} else {
 		defer store.Close()
-
-		record1 := &User{
-			Username: "1",
-			Password: "1",
-		}
-
-		record2 := &User{
-			Username: "2",
-			Password: "2",
-		}
 
 		d1 := newDoc(uuid.NewV4().String())
 		d1.SetType("test")
 		d1.SetExpiry(1)
-		d1.SetData(record1)
+		d1.SetData(&User{
+			Username: "1",
+			Password: "1",
+		})
+
 
 		d2 := newDoc(uuid.NewV4().String())
 		d2.SetType("test")
 		d2.SetMeta(database.TTL, 1)
-		d2.SetData(record2)
+		d2.SetData(&User{
+			Username: "2",
+			Password: "2",
+		})
 
+
+		// Test Create
 		if res, ok := store.Create(d1, d2); !ok {
 			t.Error(_firstFault(res))
+		}
+
+		// Test Conflict
+		res, _ := store.Create(d1, d2)
+		for _, r := range res {
+			if _, ok := r.Fault().(database.AlreadyExistsError); !ok {
+				t.Fatalf("Expected AlreadyExistsError. got %+v.\n", r.Fault())
+			}
 		}
 	}
 
@@ -86,10 +97,33 @@ func TestCouchbaseStore_DestroyOne(t *testing.T) {
 		d1.SetExpiry(1)
 		d1.SetData(record1)
 
-		if row := store.CreateOne(d1); row.IsFaulted() {
-			t.Error(row.Fault())
-		} else if row = store.DestroyOne(row); row.IsFaulted() {
+
+		row := store.CreateOne(d1)
+		if row.IsFaulted() {
 			t.Fatal(row.Fault())
+		}
+
+
+		// Test Lock
+		row.SetMeta(database.LOCK, 1)
+		row = store.ReadOne(row)
+
+		// Test Destroy One
+		r := store.DestroyOne(row.GetKey())
+		if _, ok := r.Fault().(database.LockedError); !ok {
+			t.Fatalf("Expected LockedError. got %+v.\n", r.Fault())
+		}
+
+		// Test Destroy One
+		if row = store.DestroyOne(row); row.IsFaulted() {
+			t.Error(row.Fault())
+		}
+
+
+		// Test if not exists
+		r = store.DestroyOne("123");
+		if _, ok := r.Fault().(database.NotFoundError); !ok {
+			t.Fatalf("Expected NotFoundError. got %+v.\n", r.Fault())
 		}
 	}
 }
@@ -118,10 +152,19 @@ func TestCouchbaseStore_Destroy(t *testing.T) {
 		d3.SetExpiry(1)
 		d3.SetData(record1)
 
+		// Test destroy
 		if rows, ok := store.Create(d1, d2, d3); !ok {
 			t.Error("Error creating records...", _firstFault(rows))
 		} else if rs, ok := store.Destroy(d1, d2, d3); !ok {
 			t.Error(_firstFault(rs))
+		}
+
+		// Test not found
+		rs, _ := store.Destroy(d1, d2, d3)
+		for _, r := range rs {
+			if _, ok := r.Fault().(database.NotFoundError); !ok {
+				t.Fatalf("Expected NotFoundError. got %+v.\n", r.Fault())
+			}
 		}
 	}
 }
@@ -140,19 +183,24 @@ func TestCouchbaseStore_CreateOne(t *testing.T) {
 			Password: "password",
 		})
 
-		if res := store.CreateOne(d); res.IsFaulted() {
-			t.Error(res.Fault())
+		// Test Create One
+		if r := store.CreateOne(d); r.IsFaulted() {
+			t.Error(r.Fault())
 		}
 
-		if res := store.CreateOne(d); !res.IsFaulted() {
-			t.Error("document should be faulted since it already exists one with the same key")
+		// Test Conflict
+		r := store.CreateOne(d)
+		if _, ok := r.Fault().(database.AlreadyExistsError); !ok {
+			t.Error("Expected AlreadyExistsError. got %+v.\n", r.Fault())
 		}
 
 		time.Sleep(2 * time.Second)
+		// Test TTL
 		if res := store.CreateOne(d); res.IsFaulted() {
 			t.Error(res.Fault())
 		}
 
+		// Test Create One without row
 		if res := store.CreateOne(d.GetData()); res.IsFaulted() {
 			t.Error(res.Fault())
 		} else if res = store.DestroyOne(res); res.IsFaulted() {
@@ -211,14 +259,14 @@ func TestCouchbaseStore_ReadOne(t *testing.T) {
 		d.SetExpiry(1)
 		d.SetData(record)
 
-		 res := store.CreateOne(d);
-		if res.IsFaulted()  {
+		res := store.CreateOne(d)
+		if res.IsFaulted() {
 			t.Error(res.Fault())
 			return
 		}
 
 		if res := store.ReadOne(res.GetKey()); res.IsFaulted() {
-				t.Error(res.Fault())
+			t.Error(res.Fault())
 		} else {
 			switch v := res.GetData().(type) {
 			case []byte:
@@ -243,12 +291,14 @@ func TestCouchbaseStore_ReadOne(t *testing.T) {
 		if res := store.ReadOne(res); res.IsFaulted() {
 			t.Error(res.Fault())
 		} else {
-			switch  res.GetData().(type) {
+			switch res.GetData().(type) {
 			case *User:
 				res.SetMeta(database.CAS, nil)
 				res.SetMeta(database.TTL, 1)
-				if res2 := store.TouchOne(res); !res2.IsFaulted() {
-					t.Fatal("Expected error")
+				if r := store.TouchOne(res); r.IsFaulted() {
+					if _, ok := r.Fault().(database.LockedError); !ok {
+						t.Fatalf("Expected LockedError. got %+v.\n", r.Fault())
+					}
 				}
 				break
 			default:
@@ -312,6 +362,12 @@ func TestCouchbaseStore_Read(t *testing.T) {
 		d2.SetMeta(database.CAS, nil)
 		if rows, ok := store.Replace(d1, d2); ok {
 			t.Error("expected documents to be locked.", _firstFault(rows))
+		} else {
+			for _, r := range rows {
+				if _, ok := r.Fault().(database.LockedError); !ok {
+					t.Fatalf("Expected LockedError. got %+v.\n", r.Fault())
+				}
+			}
 		}
 	}
 }
@@ -413,8 +469,8 @@ func TestCouchbaseStore_TouchOne(t *testing.T) {
 		d.SetData(record)
 		d.SetMeta("Func", "TestCouchbaseStore_TouchOne")
 
-		res := store.CreateOne(d);
-		if res.IsFaulted()  {
+		res := store.CreateOne(d)
+		if res.IsFaulted() {
 			t.Error(res.Fault())
 			return
 		}
@@ -429,11 +485,15 @@ func TestCouchbaseStore_TouchOne(t *testing.T) {
 		if res := store.ReadOne(res); res.IsFaulted() {
 			t.Error(res.Fault())
 		} else {
-			switch  res.GetData().(type) {
+			switch res.GetData().(type) {
 			case *User:
 				res.SetMeta(database.CAS, nil)
 				res.SetMeta(database.TTL, 1)
-				if res = store.TouchOne(res); !res.IsFaulted() {
+				if res = store.TouchOne(res); res.IsFaulted() {
+					if _, ok := res.Fault().(database.LockedError); !ok {
+						t.Fatalf("Expected LockedError. got %+v.\n", res.Fault())
+					}
+				} else {
 					t.Fatal("Expected an error. doc is locked")
 				}
 				break
@@ -507,6 +567,14 @@ func TestCouchbaseStore_Touch(t *testing.T) {
 		d2.SetMeta(database.TTL, 1)
 		if rows, ok := store.Touch(d1, d2); ok {
 			t.Error("expected documents to be locked.", _firstFault(rows))
+		} else {
+			for _, r := range rows {
+				if r.IsFaulted() {
+					if _, ok := r.Fault().(database.LockedError); !ok {
+						t.Fatalf("Expected LockedError. got %+v.\n", r.Fault())
+					}
+				}
+			}
 		}
 	}
 }
