@@ -237,8 +237,6 @@ func (c *CouchbaseStore) Read(xs ...interface{}) ([]Row, bool) {
 			doc.Data = value.GetData()
 			doc.mergeMetadata(value.Metadata())
 
-			cas, _ := value.GetMeta(CAS).(gocb.Cas)
-
 			if lock := value.GetMeta(LOCK); lock != nil {
 				for _, x := range xs {
 					rows := rows[:0]
@@ -253,9 +251,10 @@ func (c *CouchbaseStore) Read(xs ...interface{}) ([]Row, bool) {
 
 			bulkOps[i] = &gocb.GetOp{
 				Key:   doc.GetKey(),
-				Cas:   cas,
+				Cas:   makeCAS(doc.GetMeta(CAS)),
 				Value: doc,
 			}
+
 		case fmt.Stringer:
 			bulkOps[i] = &gocb.GetOp{
 				Key:   value.String(),
@@ -358,8 +357,7 @@ func (c *CouchbaseStore) UnlockOne(x interface{}) Row {
 		return doc
 	}
 
-	cas, _ := doc.GetMeta(CAS).(gocb.Cas)
-	if cas, err := c.bucket.Unlock(doc.GetKey(), cas); err != nil {
+	if cas, err := c.bucket.Unlock(doc.GetKey(), makeCAS(doc.GetMeta(CAS)),); err != nil {
 		doc.fault = makeReadError(err)
 	} else {
 		doc.SetMeta(TTL, nil)
@@ -391,11 +389,9 @@ func (c *CouchbaseStore) Replace(xs ...interface{}) ([]Row, bool) {
 			doc.Data = value.GetData()
 			doc.mergeMetadata(value.Metadata())
 
-			cas, _ := value.GetMeta(CAS).(gocb.Cas)
-
 			bulkOps[i] = &gocb.ReplaceOp{
 				Key:    doc.GetKey(),
-				Cas:    cas,
+				Cas:    makeCAS(doc.GetMeta(CAS)),
 				Value:  doc,
 				Expiry: makeUint32(value.GetMeta(TTL)),
 			}
@@ -443,8 +439,7 @@ func (c *CouchbaseStore) ReplaceOne(x interface{}) Row {
 		doc.Data = x
 	}
 
-	cas, _ := doc.GetMeta(CAS).(gocb.Cas)
-	if cas, err := c.bucket.Replace(doc.GetKey(), doc, cas, makeUint32(doc.GetMeta(TTL))); err != nil {
+	if cas, err := c.bucket.Replace(doc.GetKey(), doc, makeCAS(doc.GetMeta(CAS)), makeUint32(doc.GetMeta(TTL))); err != nil {
 		doc.fault = makeMutationError(err)
 	} else {
 		doc.SetMeta(TTL, nil)
@@ -475,11 +470,9 @@ func (c *CouchbaseStore) Upsert(xs ...interface{}) ([]Row, bool) {
 			doc.Data = value.GetData()
 			doc.mergeMetadata(value.Metadata())
 
-			cas, _ := value.GetMeta(CAS).(gocb.Cas)
-
 			bulkOps[i] = &gocb.UpsertOp{
 				Key:    doc.GetKey(),
-				Cas:    cas,
+				Cas:    makeCAS(doc.GetMeta(CAS)),
 				Value:  doc,
 				Expiry: makeUint32(value.GetMeta(TTL)),
 			}
@@ -528,8 +521,7 @@ func (c *CouchbaseStore) UpsertOne(x interface{}) Row {
 		doc.Data = x
 	}
 
-	cas, _ := doc.GetMeta(CAS).(gocb.Cas)
-	if cas, err := c.bucket.Replace(doc.GetKey(), doc, cas, makeUint32(doc.GetMeta(TTL))); err != nil {
+	if cas, err := c.bucket.Replace(doc.GetKey(), doc, makeCAS(doc.GetMeta(CAS)), makeUint32(doc.GetMeta(TTL))); err != nil {
 		doc.fault = makeMutationError(err)
 	} else {
 		doc.SetMeta(TTL, nil)
@@ -584,10 +576,9 @@ func (c *CouchbaseStore) Destroy(xs ...interface{}) ([]Row, bool) {
 			doc.Data = value.GetData()
 			doc.mergeMetadata(value.Metadata())
 
-			cas, _ := value.GetMeta(CAS).(gocb.Cas)
 			bulkOps[i] = &gocb.RemoveOp{
 				Key: doc.GetKey(),
-				Cas: cas,
+				Cas: makeCAS(doc.GetMeta(CAS)),
 			}
 		case fmt.Stringer:
 			bulkOps[i] = &gocb.RemoveOp{
@@ -617,7 +608,6 @@ func (c *CouchbaseStore) Destroy(xs ...interface{}) ([]Row, bool) {
 }
 func (c *CouchbaseStore) DestroyOne(x interface{}) Row {
 
-	var cas gocb.Cas
 	doc := newDoc("")
 
 	switch value := x.(type) {
@@ -629,7 +619,6 @@ func (c *CouchbaseStore) DestroyOne(x interface{}) Row {
 		doc.Type = value.GetType()
 		doc.Data = value.GetData()
 		doc.mergeMetadata(value.Metadata())
-		cas, _ = value.GetMeta(CAS).(gocb.Cas)
 	case fmt.Stringer:
 		doc.key = value.String()
 	default:
@@ -637,7 +626,7 @@ func (c *CouchbaseStore) DestroyOne(x interface{}) Row {
 		return doc
 	}
 
-	if cas, err := c.bucket.Remove(doc.GetKey(), cas); err != nil {
+	if cas, err := c.bucket.Remove(doc.GetKey(), makeCAS(doc.GetMeta(CAS))); err != nil {
 		doc.fault = makeReadError(err)
 	} else {
 		doc.SetMeta(TTL, nil)
@@ -672,10 +661,9 @@ func (c *CouchbaseStore) Touch(xs ...interface{}) ([]Row, bool) {
 			doc.Data = value.GetData()
 			doc.mergeMetadata(value.Metadata())
 
-			cas, _ := value.GetMeta(CAS).(gocb.Cas)
 			bulkOps[i] = &gocb.TouchOp{
 				Key:    doc.GetKey(),
-				Cas:    cas,
+				Cas:    makeCAS(doc.GetMeta(CAS)),
 				Expiry: makeUint32(value.GetMeta(TTL)),
 			}
 		case fmt.Stringer:
@@ -721,8 +709,7 @@ func (c *CouchbaseStore) TouchOne(x interface{}) Row {
 		doc.key = value.String()
 	}
 
-	cas, _ := doc.GetMeta(CAS).(gocb.Cas)
-	if cas, err := c.bucket.Touch(doc.GetKey(), cas, makeUint32(doc.GetMeta(TTL))); err != nil {
+	if cas, err := c.bucket.Touch(doc.GetKey(), makeCAS(doc.GetMeta(CAS)), makeUint32(doc.GetMeta(TTL))); err != nil {
 		doc.fault = makeReadError(err)
 	} else {
 		doc.SetMeta(TTL, nil)
