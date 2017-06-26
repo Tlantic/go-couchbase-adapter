@@ -85,6 +85,10 @@ func makeCAS(v interface{}) (cas gocb.Cas) {
 	switch value := v.(type) {
 	case gocb.Cas:
 		cas = value
+	case float32:
+		cas = gocb.Cas(uint64(value))
+	case float64:
+		cas = gocb.Cas(uint64(value))
 	case string:
 		casint, _ := strconv.ParseUint(value, 64, 10)
 		cas = gocb.Cas(casint)
